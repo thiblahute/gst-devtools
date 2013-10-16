@@ -46,6 +46,12 @@ static GstElement *pipeline, *encodebin;
 static GstEncodingProfile *encoding_profile = NULL;
 static gboolean eos_on_shutdown = FALSE;
 
+static const gchar *subtitles_caps_prefixes[] = { "text/x-raw",
+  "subpicture/", "application/x-subtitle",
+  "application/x-ssa", "application/x-ass", "subtitle/",
+  "application/x-kate", NULL
+};
+
 typedef struct
 {
   volatile gint refcount;
@@ -498,7 +504,7 @@ bus_callback (GstBus * bus, GstMessage * message, gpointer data)
 }
 
 static void
-pad_added_cb (GstElement * uridecodebin, GstPad * pad, GstElement * encodebin)
+pad_added_cb (GstElement * uridecodebin, GstPad * pad)
 {
   GstCaps *caps;
   GstPad *sinkpad = NULL;
@@ -533,25 +539,43 @@ pad_added_cb (GstElement * uridecodebin, GstPad * pad, GstElement * encodebin)
 }
 
 static void
-create_transcoding_pipeline (gchar * uri, gchar * outuri)
+create_src (gchar * uri, const gchar * suburi)
 {
-  GstElement *src, *sink;
+  GstElement *suburidecodebin;
+  GstElement *uridecodebin = gst_element_factory_make ("uridecodebin", NULL);
+
+  g_object_set (uridecodebin, "uri", uri, NULL);
+  g_signal_connect (uridecodebin, "pad-added", G_CALLBACK (pad_added_cb), NULL);
+  gst_bin_add (GST_BIN (pipeline), uridecodebin);
+
+  if (suburi == NULL)
+    return;
+
+  suburidecodebin = gst_element_factory_make ("uridecodebin", "source");
+  g_signal_connect (suburidecodebin, "pad-added", G_CALLBACK (pad_added_cb),
+      NULL);
+  g_object_set (suburidecodebin, "uri", suburi, NULL);
+
+  gst_bin_add (GST_BIN (pipeline), suburidecodebin);
+}
+
+static void
+create_transcoding_pipeline (gchar * uri, gchar * outuri, const gchar * suburi)
+{
+  GstElement *sink;
 
   mainloop = g_main_loop_new (NULL, FALSE);
 
   pipeline = gst_pipeline_new ("encoding-pipeline");
-  src = gst_element_factory_make ("uridecodebin", NULL);
-
   encodebin = gst_element_factory_make ("encodebin", NULL);
   sink = gst_element_make_from_uri (GST_URI_SINK, outuri, "sink", NULL);
+  gst_bin_add_many (GST_BIN (pipeline), encodebin, sink, NULL);
   g_assert (sink);
 
-  g_object_set (src, "uri", uri, NULL);
+  create_src (uri, suburi);
+
   g_object_set (encodebin, "profile", encoding_profile, NULL);
 
-  g_signal_connect (src, "pad-added", G_CALLBACK (pad_added_cb), encodebin);
-
-  gst_bin_add_many (GST_BIN (pipeline), src, encodebin, sink, NULL);
   gst_element_link (encodebin, sink);
 }
 
@@ -650,6 +674,18 @@ _parse_encoding_profile (const gchar * option_name, const gchar * value,
         g_str_has_prefix (strcaps_v[i], "image/")) {
       profile = GST_ENCODING_PROFILE (gst_encoding_video_profile_new (caps,
               preset_name, restrictioncaps, presence));
+    } else {
+      guint n;
+
+      for (n = 0; subtitles_caps_prefixes[n]; n++) {
+        if (g_str_has_prefix (strcaps_v[i], subtitles_caps_prefixes[n])) {
+          profile =
+              GST_ENCODING_PROFILE (gst_encoding_subtitle_profile_new (caps,
+                  preset_name, restrictioncaps, presence));
+          break;
+        }
+
+      }
     }
 
     g_free (preset_name);
@@ -711,6 +747,7 @@ main (int argc, gchar ** argv)
   const gchar *scenario = NULL;
   gboolean want_help = FALSE;
   gboolean list_scenarios = FALSE;
+  const gchar *subtitle_uri = NULL;
 
   GOptionEntry options[] = {
     {"output-format", 'o', 0, G_OPTION_ARG_CALLBACK, &_parse_encoding_profile,
@@ -732,6 +769,8 @@ main (int argc, gchar ** argv)
           "exiting.", NULL},
     {"list-scenarios", 'l', 0, G_OPTION_ARG_NONE, &list_scenarios,
         "List the avalaible scenarios that can be run", NULL},
+    {"subtitle-uri", 's', 0, G_OPTION_ARG_STRING, &subtitle_uri,
+        "Set a URI where to find a subtitle file"},
     {NULL}
   };
 
@@ -791,7 +830,7 @@ main (int argc, gchar ** argv)
   }
 
   /* Create the pipeline */
-  create_transcoding_pipeline (argv[1], argv[2]);
+  create_transcoding_pipeline (argv[1], argv[2], subtitle_uri);
 
 #ifdef G_OS_UNIX
   signal_watch_id =
