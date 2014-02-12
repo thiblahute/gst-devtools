@@ -214,6 +214,7 @@ class GstValidateTest(Test):
         # defines how much the process can be outside of the configured
         # segment / seek
         self.max_outside_segment = max_outside_segment
+        self._sent_eos_pos = None
 
         if scenario is None or scenario.name.lower() == "none":
             self.scenario = None
@@ -331,6 +332,22 @@ class GstValidateTest(Test):
         return (utils.gsttime_from_tuple(v[:4]),
                 utils.gsttime_from_tuple(v[4:8]),
                 float(str(v[8]) + "." + str(v[9])))
+
+    def sent_eos_position(self):
+        if self._sent_eos_pos is not None:
+            return self._sent_eos_pos
+
+        m = None
+        rate = start = stop = None
+
+        for l in reversed(open(self.logfile, 'r').readlines()):
+            l = l.lower()
+            if "sending eos" in l:
+                m = l
+                self._sent_eos_pos = self.get_current_position()
+                return self._sent_eos_pos
+
+        return None
 
     def get_current_position(self):
         position, duration = self._get_position()

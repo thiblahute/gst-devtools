@@ -206,6 +206,15 @@ class GstValidateTranscodingTest(GstValidateTest):
         self.add_arguments(self.uri, self.dest_file)
 
     def get_current_value(self):
+        position = self.get_current_position()
+        sent_eos = self.sent_eos_position()
+        if sent_eos is not None:
+            diff = ((position - sent_eos) / GST_SECOND)
+            if diff > 30:
+                self.set_result(Result.FAILED, "Got no EOS 30 seconds after sending EOS"
+                                " concidered as FAILLING")
+                return Result.FAILED
+
         return self.get_current_size()
 
     def check_results(self):
@@ -213,7 +222,7 @@ class GstValidateTranscodingTest(GstValidateTest):
             orig_duration = long(self.file_infos.get("media-info", "file-duration"))
             res, msg = compare_rendered_with_original(orig_duration, self.dest_file)
             self.set_result(res, msg)
-        else:
+        elif self.message == "":
             GstValidateTest.check_results(self)
 
 
