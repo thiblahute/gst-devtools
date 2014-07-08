@@ -681,7 +681,7 @@ _check_position (GstValidateScenario * scenario, gdouble rate,
   if (priv->seeked_in_pause && priv->seek_flags & GST_SEEK_FLAG_ACCURATE) {
     if ((rate > 0 && position != priv->segment_start) ||
         (rate < 0 && position != priv->segment_stop)) {
-      GST_VALIDATE_REPORT (scenario, QUERY_POSITION_OUT_OF_SEGMENT,
+      GST_VALIDATE_REPORT (scenario, EVENT_SEEK_RESULT_POSITION_WRONG,
           "Reported position after accurate seek in PAUSED state should be exactlty"
           " what the user asked for %" GST_TIME_FORMAT " != %" GST_TIME_FORMAT,
           GST_TIME_ARGS (position), GST_TIME_ARGS (priv->segment_start));
