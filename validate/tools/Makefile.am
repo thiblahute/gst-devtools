@@ -3,6 +3,7 @@ SUBDIRS = \
 
 bin_PROGRAMS = \
 	gst-validate-@GST_API_VERSION@ \
+	gnl-validate-@GST_API_VERSION@ \
 	gst-validate-transcoding-@GST_API_VERSION@ \
 	gst-validate-media-check-@GST_API_VERSION@
 
@@ -15,6 +16,7 @@ LDADD = $(top_builddir)/gst/validate/libgstvalidate-@GST_API_VERSION@.la $(GST_P
 gst_validate_@GST_API_VERSION@_SOURCES = gst-validate.c
 gst_validate_@GST_API_VERSION@_CFLAGS = $(GIO_CFLAGS) $(AM_CFLAGS)
 gst_validate_@GST_API_VERSION@_LDADD = $(GIO_LIBS) $(LDADD)
+gnl_validate_@GST_API_VERSION@_SOURCES = gnl-validate.c
 gst_validate_transcoding_@GST_API_VERSION@_SOURCES = gst-validate-transcoding.c
 gst_validate_media_check_@GST_API_VERSION@_SOURCES = gst-validate-media-check.c
 
