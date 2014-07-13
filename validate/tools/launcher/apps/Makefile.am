@@ -3,4 +3,6 @@ appsdir = $(libdir)/gst-validate-launcher/python/launcher/apps/
 apps_PYTHON = \
 	ges-launch.py \
 	validate/validate_testsuite.py\
-	gst-validate.py
+	gst-validate.py \
+	gnl-validate.py \
+	gnl/gnl_testsuit.py
