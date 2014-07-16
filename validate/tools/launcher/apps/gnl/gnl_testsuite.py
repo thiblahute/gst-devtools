@@ -33,7 +33,7 @@ def register_default_scenarios(self):
 
 COMPOSITION_DESCRIPTIONS = \
     [
-        ("one_source",
+        ("video.one_source",
          """gnlsource, bin_desc=\\" videotestsrc ! capsfilter caps=video/x-raw,height=720,width=1080 \\", start=0, duration=2.0,priority=1\;""", "autovideosink"),
 
         ("one_after_another",
@@ -47,7 +47,7 @@ COMPOSITION_DESCRIPTIONS = \
             gnlsource, bin_desc=\\" videotestsrc pattern=snow ! capsfilter caps=video/x-raw,height=720,width=1080 \\", start=2.0, duration=2.0, priority=2\;""",
          "autovideosink"),
 
-        ("one_under_another",
+        ("video.one_under_another",
          # TOPOLOGY
          #
          # 0           1           2           3           4 | Priority
@@ -59,7 +59,7 @@ COMPOSITION_DESCRIPTIONS = \
             gnlsource, bin_desc=\\" videotestsrc pattern=snow ! capsfilter caps=video/x-raw,height=720,width=1080 \\", start=1.0, duration=2.0, priority=1\;""",
          "autovideosink"),
 
-        ("complex_operations",
+        ("video.complex_operations",
 
          # TOPOLOGY
          #
@@ -73,7 +73,7 @@ COMPOSITION_DESCRIPTIONS = \
             gnlsource, bin_desc=\\" videotestsrc pattern=snow ! capsfilter caps=video/x-raw,height=720,width=1080 \\",  start=2.0, duration=4.0, priority=2\;""",
          "autovideosink"),
 
-        ("complex_expandable_operations",
+        ("video.complex_expandable_operations",
          # TOPOLOGY
          #
          # 0           1           2           3           4     ..   6 | Priority
@@ -85,7 +85,8 @@ COMPOSITION_DESCRIPTIONS = \
             gnlsource, bin_desc=\\" videotestsrc ! capsfilter caps=video/x-raw,height=720,width=1080 \\", start=0, duration=4.0, priority=1\;
             gnlsource, bin_desc=\\" videotestsrc pattern=snow ! capsfilter caps=video/x-raw,height=720,width=1080 \\", start=2.0, duration=4.0, priority=2\;""",
          "autovideosink"),
-        ("one_after_another_mixed",
+
+        ("video.one_after_another_mixed",
          # TOPOLOGY
          #
          # 0           1           2           3           4     | Priority
@@ -95,7 +96,72 @@ COMPOSITION_DESCRIPTIONS = \
          """gnlsource, bin_desc=\\" videotestsrc ! capsfilter caps=video/x-raw,height=720,width=1080 \\",start=0,duration=2.0,priority=2\;
             gnlsource, bin_desc=\\"videotestsrc pattern=snow\\",start=2.0,duration=2.0,priority=2\;
              gnloperation, bin_desc=compositor, expandable=true, priority=0""",
-         "autovideosink")
+         "autovideosink"),
+
+        ("audio.one_source",
+         """gnlsource, bin_desc=\\" audiotestsrc ! capsfilter caps=audio/x-raw \\", start=0, duration=2.0,priority=1\;""", "autoaudiosink"),
+
+        ("one_after_another",
+         # TOPOLOGY
+         #
+         # 0           1           2  | Priority
+         # ------------------------------------------
+         # [       source1         ]  | 1
+         #
+         """gnlsource, bin_desc=\\" audiotestsrc ! capsfilter caps=audio/x-raw \\", start=0, duration=2.0, priority=2\;
+            gnlsource, bin_desc=\\" audiotestsrc wave=triangle ! capsfilter caps=audio/x-raw \\", start=2.0, duration=2.0, priority=2\;""",
+         "autoaudiosink"),
+
+        ("audio.one_under_another",
+         # TOPOLOGY
+         #
+         # 0           1           2           3           4 | Priority
+         # --------------------------------------------------------------
+         # [       source1        ]                          | 1
+         #             [        source2       ]              | 2
+         #
+         """gnlsource, bin_desc=\\" audiotestsrc ! capsfilter caps=audio/x-raw \\",start=0, duration=2.0,priority=0\;
+            gnlsource, bin_desc=\\" audiotestsrc wave=triangle ! capsfilter caps=audio/x-raw \\", start=1.0, duration=2.0, priority=1\;""",
+         "autoaudiosink"),
+
+        ("audio.complex_operations",
+
+         # TOPOLOGY
+         #
+         # 0           1           2           3           4     ..   6 | Priority
+         # ----------------------------------------------------------------------------
+         #                         [------ oper ----------]             | 1
+         # [--------------------- source1 ----------------]             | 2
+         #                         [------------ source2       ------]  | 3
+         """gnloperation, bin_desc=adder, start=2.0, duration=2.0, priority=0\;\
+            gnlsource, bin_desc=\\" audiotestsrc ! capsfilter caps=audio/x-raw \\", start=0, duration=4.0, priority=1\;
+            gnlsource, bin_desc=\\" audiotestsrc wave=triangle ! capsfilter caps=audio/x-raw \\",  start=2.0, duration=4.0, priority=2\;""",
+         "autoaudiosink"),
+
+        ("audio.complex_expandable_operations",
+         # TOPOLOGY
+         #
+         # 0           1           2           3           4     ..   6 | Priority
+         # ----------------------------------------------------------------------------
+         # [ ......................[------ oper ----------]..........]  | 1 EXPANDABLE
+         # [--------------------- source1 ----------------]             | 2
+         #                         [------------ source2       ------]  | 3
+         """gnloperation, bin_desc=adder, start=\(guint64\) 2000000000, duration=\(guint64\) 2000000000, expandable=true, priority=0\;
+            gnlsource, bin_desc=\\" audiotestsrc ! capsfilter caps=audio/x-raw \\", start=0, duration=4.0, priority=1\;
+            gnlsource, bin_desc=\\" audiotestsrc wave=triangle ! capsfilter caps=audio/x-raw \\", start=2.0, duration=4.0, priority=2\;""",
+         "autoaudiosink"),
+
+        ("audio.one_after_another_mixed",
+         # TOPOLOGY
+         #
+         # 0           1           2           3           4     | Priority
+         # ----------------------------------------------------------------------------
+         # [ ...................... oper ..................]     | 1 EXPANDABLE
+         # [--- source1------------][----- source2   ------]     | 2
+         """gnlsource, bin_desc=\\" audiotestsrc ! capsfilter caps=audio/x-raw \\",start=0,duration=2.0,priority=2\;
+            gnlsource, bin_desc=\\"audiotestsrc wave=triangle\\",start=2.0,duration=2.0,priority=2\;
+             gnloperation, bin_desc=adder, expandable=true, priority=0""",
+         "autoaudiosink")
     ]
 
 def register_default_test_generators(self):
