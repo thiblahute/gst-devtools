@@ -263,7 +263,6 @@ _parse_composition (gchar ** argv, GError ** error)
   gint i;
   GString *str;
   gchar *tmp;
-  gboolean unused;
   gchar **argvp, *arg;
   GstCaps *compo_desc;
 
@@ -343,7 +342,7 @@ _parse_composition (gchar ** argv, GError ** error)
     gst_structure_foreach (s, (GstStructureForeachFunc) _set_property, element);
 
     GST_ERROR_OBJECT (element, "Adding %" GST_PTR_FORMAT, element);
-    g_signal_emit_by_name (comp, "add-object", element, &unused);
+    gst_bin_add (GST_BIN (comp), element);
   }
 
 
