@@ -66,6 +66,22 @@ def register_default_test_generators(self):
                                                     },
                                                 valid_scenarios=valid_mixing_scenarios))
 
+    self.add_generators(GstValidateMixerTestsGenerator("audiomixer" + ".simple", self,
+                                        "audiomixer",
+                                        "audio",
+                                        converter="audioconvert ! audioresample",
+                                        mixed_srcs = {
+                                            "many_source": tuple(["audiotestsrc freq=%i" %i for i in  range(100, 2000, 100)])
+                                        }, valid_scenarios=valid_mixing_scenarios))
+
+    self.add_generators(GstValidateMixerTestsGenerator("audiomixer" + ".simple", self,
+                                        "audiomixer",
+                                        "audio",
+                                        converter="audioconvert ! audioresample",
+                                        mixed_srcs = {
+                                            "2_sources": ("audiotestsrc", "audiotestsrc sine=triangle")
+                                        }, valid_scenarios=valid_mixing_scenarios))
+
 
 def register_default_scenarios(self):
     """

@@ -133,7 +133,7 @@ COMPOSITION_DESCRIPTIONS = \
          #                         [------ oper ----------]             | 1
          # [--------------------- source1 ----------------]             | 2
          #                         [------------ source2       ------]  | 3
-         """gnloperation, bin_desc=adder, start=2.0, duration=2.0, priority=0\;\
+         """gnloperation, bin_desc=audiomixer, start=2.0, duration=2.0, priority=0\;\
             gnlsource, bin_desc=\\" audiotestsrc ! capsfilter caps=audio/x-raw \\", start=0, duration=4.0, priority=1\;
             gnlsource, bin_desc=\\" audiotestsrc wave=triangle ! capsfilter caps=audio/x-raw \\",  start=2.0, duration=4.0, priority=2\;""",
          "autoaudiosink"),
@@ -146,7 +146,7 @@ COMPOSITION_DESCRIPTIONS = \
          # [ ......................[------ oper ----------]..........]  | 1 EXPANDABLE
          # [--------------------- source1 ----------------]             | 2
          #                         [------------ source2       ------]  | 3
-         """gnloperation, bin_desc=adder, start=\(guint64\) 2000000000, duration=\(guint64\) 2000000000, expandable=true, priority=0\;
+         """gnloperation, bin_desc=audiomixer, start=\(guint64\) 2000000000, duration=\(guint64\) 2000000000, expandable=true, priority=0\;
             gnlsource, bin_desc=\\" audiotestsrc ! capsfilter caps=audio/x-raw \\", start=0, duration=4.0, priority=1\;
             gnlsource, bin_desc=\\" audiotestsrc wave=triangle ! capsfilter caps=audio/x-raw \\", start=2.0, duration=4.0, priority=2\;""",
          "autoaudiosink"),
@@ -160,7 +160,7 @@ COMPOSITION_DESCRIPTIONS = \
          # [--- source1------------][----- source2   ------]     | 2
          """gnlsource, bin_desc=\\" audiotestsrc ! capsfilter caps=audio/x-raw \\",start=0,duration=2.0,priority=2\;
             gnlsource, bin_desc=\\"audiotestsrc wave=triangle\\",start=2.0,duration=2.0,priority=2\;
-             gnloperation, bin_desc=adder, expandable=true, priority=0""",
+             gnloperation, bin_desc=audiomixer, expandable=true, priority=0""",
          "autoaudiosink")
     ]
 
