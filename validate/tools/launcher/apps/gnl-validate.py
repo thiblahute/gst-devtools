@@ -30,9 +30,7 @@ from loggable import Loggable
 
 from baseclasses import GstValidateTest, TestsManager, Test, \
     ScenarioManager, NamedDic, GstValidateTestsGenerator
-from utils import MediaFormatCombination, get_profile,\
-    path2url, DEFAULT_TIMEOUT, which, GST_SECOND, Result, \
-    compare_rendered_with_original, Protocols
+from utils import path2url, DEFAULT_TIMEOUT, which, GST_SECOND, Result
 
 ######################################
 #       Private global variables     #
