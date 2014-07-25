@@ -128,7 +128,10 @@ class GnlValidateLaunchTest(GstValidateTest):
 
         sink = "--set-sink "
         if self.options.mute:
-            sink += "fakesink"
+            if self.scenario.needs_clock_sync():
+                sink += "'fakesink sync=true'"
+            else:
+                sink += "fakesink"
         else:
             sink += self.sink
 

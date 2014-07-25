@@ -369,6 +369,7 @@ main (int argc, gchar ** argv)
   gint ret = 0, commit;
   const gchar *sink_str = "fakesink";
   GstElement *comp, *sink, *queue;
+  GstValidateOverride *o;
 
 #ifdef G_OS_UNIX
   guint signal_watch_id;
@@ -491,6 +492,12 @@ main (int argc, gchar ** argv)
     g_printerr ("Failed to setup Validate Runner\n");
     exit (1);
   }
+
+  o = gst_validate_override_new ();
+  gst_validate_override_change_severity (o,
+      GST_VALIDATE_ISSUE_ID_EVENT_SEEK_RESULT_POSITION_WRONG,
+      GST_VALIDATE_REPORT_LEVEL_WARNING);
+  gst_validate_override_register_by_name ("scenarios", o);
 
   monitor = gst_validate_monitor_factory_create (GST_OBJECT_CAST (pipeline),
       runner, NULL);
