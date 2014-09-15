@@ -126,6 +126,13 @@ gst_validate_report_load_issues (void)
       GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("first buffer's running time isn't 0"),
       _("the first buffer's received running time is expected to be 0"));
+  REGISTER_VALIDATE_ISSUE (WARNING, WRONG_BUFFER,
+      GST_VALIDATE_ISSUE_REPEAT_MESSAGE,
+      _("Received buffer does not correspond to wanted one."),
+      _("When checking playback of a file against a MediaInfo file"
+          " all buffers coming into the decoders might be checked"
+          " and should have the exact expected metadatas and hash of the"
+          " content"));
 
   REGISTER_VALIDATE_ISSUE (CRITICAL, WRONG_FLOW_RETURN,
       GST_VALIDATE_ISSUE_REPEAT_NOTHING,
