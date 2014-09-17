@@ -61,7 +61,8 @@ gst_validate_issue_get_id (GstValidateIssue * issue)
 }
 
 GstValidateIssue *
-gst_validate_issue_new (GstValidateIssueId issue_id, const gchar * summary,
+gst_validate_issue_new (GstValidateIssueId issue_id,
+    GstValidateIssueRepeatMode repeat, const gchar * summary,
     const gchar * description, GstValidateReportLevel default_level)
 {
   GstValidateIssue *issue = g_slice_new (GstValidateIssue);
@@ -70,7 +71,7 @@ gst_validate_issue_new (GstValidateIssueId issue_id, const gchar * summary,
   issue->summary = g_strdup (summary);
   issue->description = g_strdup (description);
   issue->default_level = default_level;
-  issue->repeat = FALSE;
+  issue->repeat = repeat;
 
   return issue;
 }
@@ -93,9 +94,9 @@ gst_validate_issue_register (GstValidateIssue * issue)
       (gpointer) gst_validate_issue_get_id (issue), issue);
 }
 
-#define REGISTER_VALIDATE_ISSUE(lvl,id,sum,desc)			\
+#define REGISTER_VALIDATE_ISSUE(lvl,id,repeat,sum,desc)			\
   gst_validate_issue_register (gst_validate_issue_new (GST_VALIDATE_ISSUE_ID_##id, \
-						       sum, desc, GST_VALIDATE_REPORT_LEVEL_##lvl))
+						       repeat, sum, desc, GST_VALIDATE_REPORT_LEVEL_##lvl))
 static void
 gst_validate_report_load_issues (void)
 {
@@ -105,58 +106,70 @@ gst_validate_report_load_issues (void)
       NULL, (GDestroyNotify) gst_validate_issue_free);
 
   REGISTER_VALIDATE_ISSUE (WARNING, BUFFER_BEFORE_SEGMENT,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("buffer was received before a segment"),
       _("in push mode, a segment event must be received before a buffer"));
   REGISTER_VALIDATE_ISSUE (ISSUE, BUFFER_IS_OUT_OF_SEGMENT,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("buffer is out of the segment range"),
       _("buffer being pushed is out of the current segment's start-stop "
           " range. Meaning it is going to be discarded downstream without "
           "any use"));
   REGISTER_VALIDATE_ISSUE (WARNING, BUFFER_TIMESTAMP_OUT_OF_RECEIVED_RANGE,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("buffer timestamp is out of the received buffer timestamps' range"),
       _("a buffer leaving an element should have its timestamps in the range "
           "of the received buffers timestamps. i.e. If an element received "
           "buffers with timestamps from 0s to 10s, it can't push a buffer with "
           "with a 11s timestamp, because it doesn't have data for that"));
   REGISTER_VALIDATE_ISSUE (WARNING, FIRST_BUFFER_RUNNING_TIME_IS_NOT_ZERO,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("first buffer's running time isn't 0"),
       _("the first buffer's received running time is expected to be 0"));
+
   REGISTER_VALIDATE_ISSUE (CRITICAL, WRONG_FLOW_RETURN,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("flow return from pad push doesn't match expected value"),
       _("flow return from a 1:1 sink/src pad element is as simple as "
           "returning what downstream returned. For elements that have multiple "
           "src pads, flow returns should be properly combined"));
   REGISTER_VALIDATE_ISSUE (ISSUE, BUFFER_AFTER_EOS,
-      _("buffer was received after EOS"),
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING, _("buffer was received after EOS"),
       _("a pad shouldn't receive any more buffers after it gets EOS"));
 
   REGISTER_VALIDATE_ISSUE (ISSUE, CAPS_IS_MISSING_FIELD,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("caps is missing a required field for its type"),
       _("some caps types are expected to contain a set of basic fields. "
           "For example, raw video should have 'width', 'height', 'framerate' "
           "and 'pixel-aspect-ratio'"));
   REGISTER_VALIDATE_ISSUE (WARNING, CAPS_FIELD_HAS_BAD_TYPE,
-      _("caps field has an unexpected type"),
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING, _("caps field has an unexpected type"),
       _("some common caps fields should always use the same expected types"));
   REGISTER_VALIDATE_ISSUE (WARNING, CAPS_EXPECTED_FIELD_NOT_FOUND,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("caps expected field wasn't present"),
       _("a field that should be present in the caps wasn't found. "
           "Fields sets on a sink pad caps should be propagated downstream "
           "when it makes sense to do so"));
   REGISTER_VALIDATE_ISSUE (CRITICAL, GET_CAPS_NOT_PROXYING_FIELDS,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("getcaps function isn't proxying downstream fields correctly"),
       _("elements should set downstream caps restrictions on its caps when "
           "replying upstream's getcaps queries to avoid upstream sending data"
           " in an unsupported format"));
   REGISTER_VALIDATE_ISSUE (CRITICAL, CAPS_FIELD_UNEXPECTED_VALUE,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("a field in caps has an unexpected value"),
       _("fields set on a sink pad should be propagated downstream via "
           "set caps"));
 
   REGISTER_VALIDATE_ISSUE (WARNING, EVENT_NEWSEGMENT_NOT_PUSHED,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("new segment event wasn't propagated downstream"),
       _("segments received from upstream should be pushed downstream"));
   REGISTER_VALIDATE_ISSUE (WARNING, SERIALIZED_EVENT_WASNT_PUSHED_IN_TIME,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("a serialized event received should be pushed in the same 'time' "
           "as it was received"),
       _("serialized events should be pushed in the same order they are "
@@ -164,84 +177,112 @@ gst_validate_report_load_issues (void)
           " a buffer with timestamp end 'X', it should be pushed right after "
           "buffers with timestamp end 'X'"));
   REGISTER_VALIDATE_ISSUE (ISSUE, EVENT_HAS_WRONG_SEQNUM,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("events that are part of the same pipeline 'operation' should "
           "have the same seqnum"),
       _("when events/messages are created from another event/message, "
           "they should have their seqnums set to the original event/message "
           "seqnum"));
   REGISTER_VALIDATE_ISSUE (WARNING, EVENT_SERIALIZED_OUT_OF_ORDER,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("a serialized event received should be pushed in the same order "
           "as it was received"),
       _("serialized events should be pushed in the same order they are "
           "received."));
   REGISTER_VALIDATE_ISSUE (WARNING, EVENT_NEW_SEGMENT_MISMATCH,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("a new segment event has different value than the received one"),
       _("when receiving a new segment, an element should push an equivalent"
           "segment downstream"));
   REGISTER_VALIDATE_ISSUE (WARNING, EVENT_FLUSH_START_UNEXPECTED,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("received an unexpected flush start event"), NULL);
   REGISTER_VALIDATE_ISSUE (WARNING, EVENT_FLUSH_STOP_UNEXPECTED,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("received an unexpected flush stop event"), NULL);
   REGISTER_VALIDATE_ISSUE (WARNING, EVENT_CAPS_DUPLICATE,
-      _("received the same caps twice"), NULL);
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING, _("received the same caps twice"),
+      NULL);
 
   REGISTER_VALIDATE_ISSUE (CRITICAL, EVENT_SEEK_NOT_HANDLED,
-      _("seek event wasn't handled"), NULL);
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING, _("seek event wasn't handled"), NULL);
   REGISTER_VALIDATE_ISSUE (CRITICAL, EVENT_SEEK_RESULT_POSITION_WRONG,
-      _("position after a seek is wrong"), NULL);
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING, _("position after a seek is wrong"),
+      NULL);
 
   REGISTER_VALIDATE_ISSUE (CRITICAL, STATE_CHANGE_FAILURE,
-      _("state change failed"), NULL);
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING, _("state change failed"), NULL);
 
   REGISTER_VALIDATE_ISSUE (CRITICAL, FILE_SIZE_IS_ZERO,
-      _("resulting file size is 0"), NULL);
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING, _("resulting file size is 0"), NULL);
   REGISTER_VALIDATE_ISSUE (WARNING, FILE_SIZE_INCORRECT,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("resulting file size wasn't within the expected values"), NULL);
   REGISTER_VALIDATE_ISSUE (WARNING, FILE_DURATION_INCORRECT,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("resulting file duration wasn't within the expected values"), NULL);
   REGISTER_VALIDATE_ISSUE (WARNING, FILE_SEEKABLE_INCORRECT,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("resulting file wasn't seekable or not seekable as expected"), NULL);
   REGISTER_VALIDATE_ISSUE (ISSUE, FILE_TAG_DETECTION_INCORRECT,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("detected tags are different than expected ones"), NULL);
   REGISTER_VALIDATE_ISSUE (CRITICAL, FILE_PROFILE_INCORRECT,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("resulting file stream profiles didn't match expected values"), NULL);
   REGISTER_VALIDATE_ISSUE (CRITICAL, FILE_NOT_FOUND,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("resulting file could not be found for testing"), NULL);
   REGISTER_VALIDATE_ISSUE (CRITICAL, FILE_CHECK_FAILURE,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("an error occured while checking the file for conformance"), NULL);
   REGISTER_VALIDATE_ISSUE (CRITICAL, FILE_PLAYBACK_START_FAILURE,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("an error occured while starting playback of the test file"), NULL);
   REGISTER_VALIDATE_ISSUE (CRITICAL, FILE_PLAYBACK_ERROR,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("an error during playback of the file"), NULL);
   REGISTER_VALIDATE_ISSUE (WARNING, FILE_NO_STREAM_ID,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("the discoverer found a stream that had no stream ID"), NULL);
 
   REGISTER_VALIDATE_ISSUE (CRITICAL, ALLOCATION_FAILURE,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("a memory allocation failed during Validate run"), NULL);
   REGISTER_VALIDATE_ISSUE (CRITICAL, MISSING_PLUGIN,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("a gstreamer plugin is missing and prevented Validate from running"),
       NULL);
   REGISTER_VALIDATE_ISSUE (WARNING, WARNING_ON_BUS,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("We got a WARNING message on the bus"), NULL);
   REGISTER_VALIDATE_ISSUE (CRITICAL, ERROR_ON_BUS,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("We got an ERROR message on the bus"), NULL);
   REGISTER_VALIDATE_ISSUE (WARNING, QUERY_POSITION_SUPERIOR_DURATION,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("Query position reported a value superior than what query duration "
           "returned"), NULL);
   REGISTER_VALIDATE_ISSUE (WARNING, QUERY_POSITION_OUT_OF_SEGMENT,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("Query position reported a value outside of the current expected "
           "segment"), NULL);
   REGISTER_VALIDATE_ISSUE (CRITICAL, SCENARIO_NOT_ENDED,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("All the actions were not executed before the program stoped"), NULL);
   REGISTER_VALIDATE_ISSUE (CRITICAL, SCENARIO_ACTION_EXECUTION_ERROR,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("The execution of an action did not properly happen"), NULL);
   REGISTER_VALIDATE_ISSUE (ISSUE, SCENARIO_ACTION_EXECUTION_ISSUE,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING,
       _("An issue happend during the execution of a scenario"), NULL);
-  REGISTER_VALIDATE_ISSUE (WARNING, G_LOG_WARNING, _("We got a g_log warning"),
-      NULL);
+  REGISTER_VALIDATE_ISSUE (WARNING, G_LOG_WARNING,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING, _("We got a g_log warning"), NULL);
   REGISTER_VALIDATE_ISSUE (WARNING, G_LOG_CRITICAL,
-      _("We got a g_log critical issue"), NULL);
-  REGISTER_VALIDATE_ISSUE (ISSUE, G_LOG_ISSUE, _("We got a g_log issue"), NULL);
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING, _("We got a g_log critical issue"),
+      NULL);
+  REGISTER_VALIDATE_ISSUE (ISSUE, G_LOG_ISSUE,
+      GST_VALIDATE_ISSUE_REPEAT_NOTHING, _("We got a g_log issue"), NULL);
 }
 
 void
@@ -412,6 +453,24 @@ gst_validate_report_get_issue_id (GstValidateReport * report)
   return gst_validate_issue_get_id (report->issue);
 }
 
+void
+gst_validate_report_add_message (GstValidateReport * report,
+    const gchar * message)
+{
+  GstValidateMessage msg;
+
+  msg.message = g_strdup (message);
+  msg.timestamp = gst_util_get_timestamp () - _gst_validate_report_start_time;
+
+  g_array_append_val (report->messages, msg);
+}
+
+static void
+_clear_message (GstValidateMessage * message)
+{
+  g_free (message->message);
+}
+
 GstValidateReport *
 gst_validate_report_new (GstValidateIssue * issue,
     GstValidateReporter * reporter, const gchar * message)
@@ -421,10 +480,11 @@ gst_validate_report_new (GstValidateIssue * issue,
   report->refcount = 1;
   report->issue = issue;
   report->reporter = reporter;  /* TODO should we ref? */
-  report->message = g_strdup (message);
-  report->timestamp =
-      gst_util_get_timestamp () - _gst_validate_report_start_time;
+  report->messages = g_array_new (TRUE, TRUE, sizeof (GstValidateMessage));
+  g_array_set_clear_func (report->messages, (GDestroyNotify) _clear_message);
   report->level = issue->default_level;
+
+  gst_validate_report_add_message (report, message);
 
   return report;
 }
@@ -433,7 +493,7 @@ void
 gst_validate_report_unref (GstValidateReport * report)
 {
   if (G_UNLIKELY (g_atomic_int_dec_and_test (&report->refcount))) {
-    g_free (report->message);
+    g_array_unref (report->messages);
     g_slice_free (GstValidateReport, report);
   }
 }
@@ -604,14 +664,22 @@ gst_validate_printf_valist (gpointer source, const gchar * format, va_list args)
 void
 gst_validate_report_printf (GstValidateReport * report)
 {
+  gint i;
+
   gst_validate_printf (NULL, "%10s : %s\n",
       gst_validate_report_level_get_name (report->level),
       report->issue->summary);
-  gst_validate_printf (NULL, "%*s Detected on <%s> at %" GST_TIME_FORMAT "\n",
-      12, "", gst_validate_reporter_get_name (report->reporter),
-      GST_TIME_ARGS (report->timestamp));
-  if (report->message)
-    gst_validate_printf (NULL, "%*s Details : %s\n", 12, "", report->message);
+  gst_validate_printf (NULL, "%*s Detected on <%s>\n",
+      12, "", gst_validate_reporter_get_name (report->reporter));
+
+  gst_validate_printf (NULL, "%*s Details:\n", 12, "");
+
+  for (i = 0; i < report->messages->len; i++) {
+    gst_validate_printf (NULL, "%*s (%" GST_TIME_FORMAT ") -> %s\n", 19, "",
+        GST_TIME_ARGS (g_array_index (report->messages, GstValidateMessage,
+                i).timestamp), g_array_index (report->messages,
+            GstValidateMessage, i).message);
+  }
   if (report->issue->description)
     gst_validate_printf (NULL, "%*s Description : %s\n", 12, "",
         report->issue->description);

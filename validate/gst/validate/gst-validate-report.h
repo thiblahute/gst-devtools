@@ -128,6 +128,14 @@ typedef enum {
 
 #define GST_VALIDATE_ISSUE_ID_AREA(id) ((guintptr)(id >> GST_VALIDATE_ISSUE_ID_SHIFT))
 
+typedef enum
+{
+  GST_VALIDATE_ISSUE_REPEAT_NOTHING,
+  GST_VALIDATE_ISSUE_REPEAT_MESSAGE,
+  GST_VALIDATE_ISSUE_REPEAT_SOURCE,
+  GST_VALIDATE_ISSUE_REPEAT_ALL
+} GstValidateIssueRepeatMode;
+
 typedef struct {
   GstValidateIssueId issue_id;
 
@@ -144,12 +152,19 @@ typedef struct {
   * issue. */
   GstValidateReportLevel default_level;
 
-  /* repeat: whether the issue might be triggered
-  * multiple times but only remembered once */
-  gboolean repeat;
+  GstValidateIssueRepeatMode repeat;
 } GstValidateIssue;
 
 #define GST_VALIDATE_ISSUE_AREA(i) (GST_VALIDATE_ISSUE_ID_AREA (gst_validate_issue_get_id (i)))
+
+typedef struct _GstValidateMessage
+{
+  gchar *message;
+
+  /* timestamp: The time at which this issue happened since
+   * the process start (to stay in sync with gst logging) */
+  GstClockTime timestamp;
+} GstValidateMessage;
 
 struct _GstValidateReport {
   gint    refcount;
@@ -162,31 +177,33 @@ struct _GstValidateReport {
   /* The reporter that reported the issue (to get names, info, ...) */
   GstValidateReporter *reporter;
  
-  /* timestamp: The time at which this issue happened since
-   * the process start (to stay in sync with gst logging) */
-  GstClockTime timestamp;
-  
   /* message: issue-specific message. Gives more detail on the actual
    * issue. Can be NULL */
-  gchar *message;
+  GArray *messages;
+
 };
+
+void gst_validate_report_add_message (GstValidateReport *report,
+    const gchar *message);
 
 #define GST_VALIDATE_ISSUE_FORMAT G_GUINTPTR_FORMAT " (%s) : %s(%" G_GUINTPTR_FORMAT "): %s"
 #define GST_VALIDATE_ISSUE_ARGS(i) gst_validate_issue_get_id (i), gst_validate_report_level_get_name (i->default_level), \
                              gst_validate_report_area_get_name (GST_VALIDATE_ISSUE_AREA (i)), GST_VALIDATE_ISSUE_AREA (i), \
                              i->summary
 
-#define GST_VALIDATE_ERROR_REPORT_PRINT_FORMAT GST_TIME_FORMAT " <%s>: %" GST_VALIDATE_ISSUE_FORMAT ": %s"
-#define GST_VALIDATE_REPORT_PRINT_ARGS(r) GST_TIME_ARGS (r->timestamp), \
+#define GST_VALIDATE_ERROR_REPORT_PRINT_FORMAT " <%s>: %" GST_VALIDATE_ISSUE_FORMAT ": %s"
+#define GST_VALIDATE_REPORT_PRINT_ARGS(r) \
                                     gst_validate_reporter_get_name (r->reporter), \
                                     GST_VALIDATE_ISSUE_ARGS (r->issue), \
-                                    r->message
+                                    g_array_index(r->messages, GstValidateMessage, 0).message
 
 void               gst_validate_report_init (void);
 GstValidateIssue  *gst_validate_issue_from_id (GstValidateIssueId issue_id);
 GstValidateIssueId gst_validate_issue_get_id (GstValidateIssue * issue);
 void               gst_validate_issue_register (GstValidateIssue * issue);
-GstValidateIssue  *gst_validate_issue_new (GstValidateIssueId issue_id, const gchar * summary,
+GstValidateIssue  *gst_validate_issue_new (GstValidateIssueId issue_id,
+             GstValidateIssueRepeatMode repeat,
+             const gchar * summary,
 					   const gchar * description,
 					   GstValidateReportLevel default_level);
 

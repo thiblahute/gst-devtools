@@ -224,8 +224,16 @@ gst_validate_runner_printf (GstValidateRunner * runner)
     g_printerr ("\n\n==== Got criticals, Return value set to 18 ====\n");
 
     for (iter = criticals; iter; iter = iter->next) {
-      g_printerr ("     Critical error %s\n",
-          ((GstValidateReport *) (iter->data))->message);
+      gint i;
+      GstValidateReport *report = ((GstValidateReport *) iter->data);
+
+      for (i = 0; i < report->messages->len; i++) {
+        GstValidateMessage message;
+
+        message = g_array_index (report->messages, GstValidateMessage, i);
+
+        g_printerr ("     Critical error %s\n", message.message);
+      }
     }
     g_printerr ("\n");
   }

@@ -117,19 +117,34 @@ gst_validate_report_valist (GstValidateReporter * reporter,
 
   gst_validate_reporter_intercept_report (reporter, report);
 
-  if (issue->repeat == FALSE) {
+  if (issue->repeat != GST_VALIDATE_ISSUE_REPEAT_ALL) {
+    GstValidateReport *prev_report;
     GstValidateIssueId issue_id = gst_validate_issue_get_id (issue);
 
-    if (g_hash_table_lookup (priv->reports, (gconstpointer) issue_id)) {
-      GST_DEBUG ("Report \"%" G_GUINTPTR_FORMAT ":%s\" already present",
-          issue_id, issue->summary);
-      gst_validate_report_unref (report);
-      return;
-    }
+    prev_report = g_hash_table_lookup (priv->reports, (gconstpointer) issue_id);
+    if (prev_report) {
 
-    g_hash_table_insert (priv->reports, (gpointer) issue_id,
-        gst_validate_report_ref (report));
+      if (issue->repeat == GST_VALIDATE_ISSUE_REPEAT_NOTHING) {
+        GST_DEBUG ("Report \"%" G_GUINTPTR_FORMAT ":%s\" already present",
+            issue_id, issue->summary);
+        gst_validate_report_unref (report);
+        g_free (message);
+
+        return;
+      } else if (issue->repeat == GST_VALIDATE_ISSUE_REPEAT_MESSAGE) {
+        gst_validate_report_add_message (prev_report, message);
+
+        gst_validate_report_unref (report);
+        g_free (message);
+
+        return;
+      }
+    }
   }
+
+  g_hash_table_insert (priv->reports, (gpointer) issue_id,
+      gst_validate_report_ref (report));
+
 #ifndef GST_DISABLE_GST_DEBUG
   combo =
       g_strdup_printf ("<%s> %" GST_VALIDATE_ISSUE_FORMAT " : %s", priv->name,
@@ -160,7 +175,7 @@ gst_validate_report_valist (GstValidateReporter * reporter,
     if (priv->runner)
       gst_validate_runner_printf (priv->runner);
 
-    g_error ("Fatal report received: %" GST_VALIDATE_ERROR_REPORT_PRINT_FORMAT,
+    g_error ("Fatal report received: " GST_VALIDATE_ERROR_REPORT_PRINT_FORMAT,
         GST_VALIDATE_REPORT_PRINT_ARGS (report));
   }
 
