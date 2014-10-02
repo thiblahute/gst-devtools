@@ -40,7 +40,7 @@ G_BEGIN_DECLS
 #define GST_VALIDATE_REPORT(m, issue_id, ...)				\
   G_STMT_START {							\
     gst_validate_report (GST_VALIDATE_REPORTER (m),			\
-			 GST_VALIDATE_ISSUE_ID_##issue_id,		\
+			 issue_id,		\
 			 __VA_ARGS__ );					\
   } G_STMT_END
 
@@ -49,7 +49,7 @@ G_BEGIN_DECLS
 #define GST_VALIDATE_REPORT(m, issue_id, args...)			\
   G_STMT_START {							\
     gst_validate_report (GST_VALIDATE_REPORTER (m),			\
-			 GST_VALIDATE_ISSUE_ID_##issue_id, ##args );	\
+			 issue_id, ##args );	\
   } G_STMT_END
 
 #endif /* G_HAVE_ISO_VARARGS */

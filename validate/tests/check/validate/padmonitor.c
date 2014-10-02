@@ -61,8 +61,7 @@ GST_START_TEST (buffer_before_segment)
     assert_equals_int (g_list_length (reports), 1);
     report = reports->data;
     fail_unless_equals_int (report->level, GST_VALIDATE_REPORT_LEVEL_WARNING);
-    fail_unless_equals_int (report->issue->issue_id,
-        GST_VALIDATE_ISSUE_ID_BUFFER_BEFORE_SEGMENT);
+    fail_unless_equals_int (report->issue->issue_id, BUFFER_BEFORE_SEGMENT);
     g_list_free_full (reports, (GDestroyNotify) gst_validate_report_unref);
   }
 
@@ -147,8 +146,7 @@ GST_START_TEST (buffer_outside_segment)
     assert_equals_int (g_list_length (reports), 1);
     report = reports->data;
     fail_unless_equals_int (report->level, GST_VALIDATE_REPORT_LEVEL_ISSUE);
-    fail_unless_equals_int (report->issue->issue_id,
-        GST_VALIDATE_ISSUE_ID_BUFFER_IS_OUT_OF_SEGMENT);
+    fail_unless_equals_int (report->issue->issue_id, BUFFER_IS_OUT_OF_SEGMENT);
     g_list_free_full (reports, (GDestroyNotify) gst_validate_report_unref);
   }
 
@@ -223,7 +221,7 @@ _first_buffer_running_time (gboolean failing)
       report = reports->data;
       fail_unless_equals_int (report->level, GST_VALIDATE_REPORT_LEVEL_WARNING);
       fail_unless_equals_int (report->issue->issue_id,
-          GST_VALIDATE_ISSUE_ID_FIRST_BUFFER_RUNNING_TIME_IS_NOT_ZERO);
+          FIRST_BUFFER_RUNNING_TIME_IS_NOT_ZERO);
     } else {
       assert_equals_int (g_list_length (reports), 0);
     }
@@ -336,8 +334,7 @@ _test_flow_aggregation (GstFlowReturn flow, GstFlowReturn flow1,
     assert_equals_int (g_list_length (reports), 1);
     report = reports->data;
     fail_unless_equals_int (report->level, GST_VALIDATE_REPORT_LEVEL_CRITICAL);
-    fail_unless_equals_int (report->issue->issue_id,
-        GST_VALIDATE_ISSUE_ID_WRONG_FLOW_RETURN);
+    fail_unless_equals_int (report->issue->issue_id, WRONG_FLOW_RETURN);
   } else {
     assert_equals_int (g_list_length (reports), 0);
 
@@ -491,8 +488,7 @@ _check_media_info (GstSegment * segment, BufferDesc * bufs)
 
         fail_unless_equals_int (report->level,
             GST_VALIDATE_REPORT_LEVEL_WARNING);
-        fail_unless_equals_int (report->issue->issue_id,
-            GST_VALIDATE_ISSUE_ID_WRONG_BUFFER);
+        fail_unless_equals_int (report->issue->issue_id, WRONG_BUFFER);
         tmp = tmp->next;
       }
     }
