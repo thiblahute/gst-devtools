@@ -58,6 +58,10 @@ typedef struct {
 GstMediaDescriptorParser * gst_media_descriptor_parser_new (GstValidateRunner *runner,
                                                             const gchar * xmlpath,
                                                             GError **error);
+GstMediaDescriptorParser *
+gst_media_descriptor_parser_new_from_xml                   (GstValidateRunner * runner,
+                                                            const gchar * xml,
+                                                            GError ** error);
 gchar * gst_media_descriptor_parser_get_xml_path        (GstMediaDescriptorParser *parser);
 GstClockTime gst_media_descriptor_parser_get_duration   (GstMediaDescriptorParser *parser);
 gboolean gst_media_descriptor_parser_get_seekable       (GstMediaDescriptorParser * parser);
