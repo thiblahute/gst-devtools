@@ -50,6 +50,7 @@ typedef enum {
   GST_VALIDATE_REPORT_LEVEL_WARNING,
   GST_VALIDATE_REPORT_LEVEL_ISSUE,
   GST_VALIDATE_REPORT_LEVEL_IGNORE,
+  GST_VALIDATE_REPORT_LEVEL_UNKNOWN,
   GST_VALIDATE_REPORT_LEVEL_NUM_ENTRIES,
 } GstValidateReportLevel;
 
@@ -174,6 +175,8 @@ void               gst_validate_issue_register (GstValidateIssue * issue);
 GstValidateIssue  *gst_validate_issue_new (GstValidateIssueId issue_id, const gchar * summary,
 					   const gchar * description,
 					   GstValidateReportLevel default_level);
+void gst_validate_issue_set_default_level (GstValidateIssue *issue,
+                                           GstValidateReportLevel default_level);
 
 GstValidateReport *gst_validate_report_new (GstValidateIssue * issue,
               GstValidateReporter * reporter,
@@ -195,6 +198,7 @@ void               gst_validate_printf_valist (gpointer source,
                                                const gchar      * format,
                                                va_list            args) G_GNUC_NO_INSTRUMENT;
 gboolean gst_validate_report_should_print (GstValidateReport * report);
+GstValidateReportLevel gst_validate_report_level_from_name (const gchar *issue_name);
 
 G_END_DECLS
 
