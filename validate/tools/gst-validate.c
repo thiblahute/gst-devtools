@@ -579,6 +579,7 @@ exit:
   g_object_unref (runner);
   g_object_unref (monitor);
   g_clear_error (&err);
+  gst_validate_deinit ();
 #ifdef G_OS_UNIX
   g_source_remove (signal_watch_id);
 #endif

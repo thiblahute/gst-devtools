@@ -179,6 +179,7 @@ void gst_validate_report_add_message (GstValidateReport *report,
                                     r->message
 
 void               gst_validate_report_init (void);
+void               gst_validate_report_deinit (void);
 GstValidateIssue  *gst_validate_issue_from_id (GstValidateIssueId issue_id);
 GstValidateIssueId gst_validate_issue_get_id (GstValidateIssue * issue);
 void               gst_validate_issue_register (GstValidateIssue * issue);

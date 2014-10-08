@@ -951,6 +951,7 @@ exit:
   g_object_unref (pipeline);
   g_object_unref (monitor);
   g_object_unref (runner);
+  gst_validate_deinit ();
 
 #ifdef G_OS_UNIX
   g_source_remove (signal_watch_id);
