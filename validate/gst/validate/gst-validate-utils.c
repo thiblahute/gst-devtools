@@ -643,3 +643,50 @@ structs_parse_from_gfile (GFile * scenario_file)
 
   return _lines_get_strutures (lines);
 }
+
+guint
+g_timeout_add_in_current_thread (guint interval,
+    GSourceFunc function, gpointer data)
+{
+  guint id;
+  GSource *source;
+  GMainContext *mcontext;
+
+  g_return_val_if_fail (function != NULL, 0);
+
+  mcontext = g_main_context_get_thread_default ();
+  if (mcontext == NULL) {
+    GST_DEBUG ("Using main context as no one found for the"
+        "thread");
+    mcontext = g_main_context_default ();
+  }
+
+  source = g_timeout_source_new (interval);
+
+  g_source_set_callback (source, function, data, NULL);
+  id = g_source_attach (source,
+      g_main_context_get_thread_default ());
+  g_source_unref (source);
+
+  return id;
+}
+
+gboolean
+g_source_remove_in_current_thread (guint id)
+{
+  GMainContext *mcontext = g_main_context_get_thread_default ();
+  GSource *source = g_main_context_find_source_by_id (mcontext, id);
+
+  if (mcontext == NULL) {
+    GST_DEBUG ("Using main context as no one found for the"
+        "thread");
+    mcontext = g_main_context_default ();
+  }
+
+  if (source) {
+    g_source_destroy (source);
+    return TRUE;
+  }
+
+  return FALSE;
+}
