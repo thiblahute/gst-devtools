@@ -41,7 +41,17 @@
 static GstClockTime _gst_validate_report_start_time = 0;
 static GstValidateDebugFlags _gst_validate_flags = 0;
 static GHashTable *_gst_validate_issues = NULL;
-static FILE **log_files = NULL;
+
+typedef struct _PipelineLog
+{
+  GstElement *pipeline;
+  GstElement *src;
+
+  gboolean is_std;
+  FILE *file;
+} PipelineLog;
+
+static GArray *log_pipelines = NULL;
 
 
 GRegex *newline_regex = NULL;
@@ -276,6 +286,88 @@ gst_validate_report_load_issues (void)
   REGISTER_VALIDATE_ISSUE (ISSUE, G_LOG_ISSUE, _("We got a g_log issue"), NULL);
 }
 
+static void
+error_cb (GstBus * bus, GstMessage * msg, gpointer unused)
+{
+  GError *err;
+  gchar *debug_info;
+
+  gst_message_parse_error (msg, &err, &debug_info);
+  GST_ERROR ("Error received from element %s: %s",
+      GST_OBJECT_NAME (msg->src), err->message);
+  g_clear_error (&err);
+  g_free (debug_info);
+}
+
+static gboolean
+_create_pipeline_from_uri (const gchar * uri, PipelineLog * plog)
+{
+  GstCaps *caps;
+  GError *err = NULL;
+  GstBus *bus;
+  GSource *bus_source;
+  GMainContext *mcontext;
+  GstElement *sink, *src, *pipeline;
+
+  if (!gst_uri_is_valid (uri)) {
+    if (g_strcmp0 (uri, "stderr") == 0) {
+      plog->is_std = TRUE;
+      plog->file = stderr;
+
+      return TRUE;
+    } else if (g_strcmp0 (uri, "stdout") == 0) {
+      plog->is_std = TRUE;
+      plog->file = stdout;
+
+      return TRUE;
+    }
+
+    sink = gst_element_factory_make ("filesink", NULL);
+    g_object_set (sink, "location", uri, NULL);
+  } else {
+    sink = gst_element_make_from_uri (GST_URI_SINK, uri, NULL, &err);
+  }
+
+  if (sink == NULL) {
+    GST_ERROR ("Could not create a sink for %s (error: %s)", uri,
+        err ? err->message : "None");
+    return FALSE;
+  }
+
+  g_object_set (sink, "async", FALSE, "qos", FALSE, "sync", FALSE, NULL);
+  src = gst_element_factory_make ("appsrc", NULL);
+  caps = gst_caps_new_simple ("raw/x-text", NULL, NULL);
+  g_object_set (src, "caps", caps, NULL);
+  pipeline = gst_pipeline_new (NULL);
+  bus = gst_element_get_bus (pipeline);
+  mcontext = g_main_context_get_thread_default ();
+  if (mcontext == NULL) {
+    GST_DEBUG ("Using main context as no one found for the" "thread");
+    mcontext = g_main_context_default ();
+  }
+
+  bus_source = gst_bus_create_watch (bus);
+  g_source_set_callback (bus_source, (GSourceFunc) gst_bus_async_signal_func,
+      NULL, NULL);
+  g_source_attach (bus_source, mcontext);
+  g_source_unref (bus_source);
+  g_signal_connect (G_OBJECT (bus), "message::error", (GCallback) error_cb,
+      NULL);
+  gst_object_unref (bus);
+
+  gst_bin_add_many (GST_BIN (pipeline), src, sink, NULL);
+
+  gst_element_link (src, sink);
+
+  gst_element_set_state (pipeline, GST_STATE_PLAYING);
+  plog->pipeline = pipeline;
+  plog->src = src;
+
+  return TRUE;
+}
+
+
+
 void
 gst_validate_report_init (void)
 {
@@ -306,37 +398,25 @@ gst_validate_report_init (void)
   }
 
   file_env = g_getenv ("GST_VALIDATE_FILE");
+  log_pipelines = g_array_new (TRUE, TRUE, sizeof (PipelineLog));
   if (file_env != NULL && *file_env != '\0') {
     gint i;
     gchar **wanted_files;
-    wanted_files = g_strsplit (file_env, G_SEARCHPATH_SEPARATOR_S, 0);
+    wanted_files = g_strsplit (file_env, "::", 0);
 
     /* FIXME: Make sure it is freed in the deinit function when that is
      * implemented */
-    log_files =
-        g_malloc0 (sizeof (FILE *) * (g_strv_length (wanted_files) + 1));
     for (i = 0; i < g_strv_length (wanted_files); i++) {
-      FILE *log_file;
+      PipelineLog plog = { 0, };
 
-      if (g_strcmp0 (wanted_files[i], "stderr") == 0) {
-        log_file = stderr;
-      } else if (g_strcmp0 (wanted_files[i], "stdout") == 0)
-        log_file = stdout;
-      else {
-        log_file = g_fopen (wanted_files[i], "w");
-      }
-
-      if (log_file == NULL) {
-        g_printerr ("Could not open log file '%s' for writing: %s\n", file_env,
-            g_strerror (errno));
-        log_file = stderr;
-      }
-
-      log_files[i] = log_file;
+      if (_create_pipeline_from_uri (wanted_files[i], &plog))
+        g_array_append_val (log_pipelines, plog);
     }
   } else {
-    log_files = g_malloc0 (sizeof (FILE *) * 2);
-    log_files[0] = stdout;
+    PipelineLog plog = { 0, };
+
+    if (_create_pipeline_from_uri ("stdout", &plog))
+      g_array_append_val (log_pipelines, plog);
   }
 
 #ifndef GST_DISABLE_GST_DEBUG
@@ -624,9 +704,21 @@ gst_validate_printf_valist (gpointer source, const gchar * format, va_list args)
   }
 #endif
 
-  for (i = 0; log_files[i]; i++) {
-    fprintf (log_files[i], "%s", string->str);
-    fflush (log_files[i]);
+  for (i = 0; i < log_pipelines->len; i++) {
+    GstFlowReturn res;
+    PipelineLog *plog = &g_array_index (log_pipelines,
+        PipelineLog, i);
+
+    if (plog->is_std) {
+      fprintf (plog->file, "%s", string->str);
+      fflush (plog->file);
+
+      continue;
+    }
+
+    g_signal_emit_by_name (plog->src, "push-buffer",
+        gst_buffer_new_wrapped (g_strdup (string->str),
+            strlen (string->str) * sizeof (gchar)), &res);
   }
 
   g_string_free (string, TRUE);
@@ -730,4 +822,26 @@ gst_validate_report_add_repeated_report (GstValidateReport * report,
   report->repeated_reports =
       g_list_append (report->repeated_reports,
       gst_validate_report_ref (repeated_report));
+}
+
+void
+gst_validate_report_deinit (void)
+{
+  gint i;
+
+  for (i = 0; i < log_pipelines->len; i++) {
+    PipelineLog *plog = &g_array_index (log_pipelines,
+        PipelineLog, i);
+
+    if (plog->is_std)
+      continue;
+
+    gst_element_set_state (plog->pipeline, GST_STATE_NULL);
+    gst_element_get_state (plog->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
+
+    gst_object_unref (plog->pipeline);
+  }
+
+  g_array_unref (log_pipelines);
+}
 }

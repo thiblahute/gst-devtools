@@ -13,5 +13,6 @@
 #include <gst/validate/gst-validate-media-info.h>
 
 void gst_validate_init (void);
+void gst_validate_deinit (void);
 
 #endif /* _GST_VALIDATE_H */

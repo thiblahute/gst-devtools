@@ -56,3 +56,9 @@ gst_validate_init (void)
   /* Ensure we load overrides before any use of a monitor */
   gst_validate_override_registry_preload ();
 }
+
+void
+gst_validate_deinit (void)
+{
+  gst_validate_report_deinit ();
+}
