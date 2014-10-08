@@ -26,6 +26,7 @@
 #endif
 
 #include "gst-validate-internal.h"
+#include "gst-validate-utils.h"
 #include "gst-validate-bin-monitor.h"
 #include "gst-validate-monitor-factory.h"
 
@@ -129,7 +130,7 @@ gst_validate_bin_monitor_dispose (GObject * object)
     g_object_unref (monitor->scenario);
 
   if (monitor->print_pos_srcid) {
-    if (g_source_remove (monitor->print_pos_srcid))
+    if (g_source_remove_in_current_thread (monitor->print_pos_srcid))
       monitor->print_pos_srcid = 0;
   }
 
@@ -240,7 +241,7 @@ _bus_handler (GstBus * bus, GstMessage * message,
         /* a 100% message means buffering is done */
         if (monitor->buffering) {
           monitor->print_pos_srcid =
-              g_timeout_add (PRINT_POSITION_TIMEOUT,
+              g_timeout_add_in_current_thread (PRINT_POSITION_TIMEOUT,
               (GSourceFunc) print_position, monitor);
           monitor->buffering = FALSE;
         }
@@ -249,7 +250,7 @@ _bus_handler (GstBus * bus, GstMessage * message,
         if (!monitor->buffering) {
           monitor->buffering = TRUE;
           if (monitor->print_pos_srcid
-              && g_source_remove (monitor->print_pos_srcid))
+              && g_source_remove_in_current_thread (monitor->print_pos_srcid))
             monitor->print_pos_srcid = 0;
         }
       }
@@ -316,8 +317,8 @@ gst_validate_bin_monitor_new (GstBin * bin, GstValidateRunner * runner,
     GstBus *bus;
 
     monitor->print_pos_srcid =
-        g_timeout_add (PRINT_POSITION_TIMEOUT, (GSourceFunc) print_position,
-        monitor);
+        g_timeout_add_in_current_thread (PRINT_POSITION_TIMEOUT,
+        (GSourceFunc) print_position, monitor);
 
     bus = gst_element_get_bus (GST_ELEMENT (bin));
     gst_bus_enable_sync_message_emission (bus);

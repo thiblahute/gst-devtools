@@ -495,7 +495,7 @@ _execute_pause (GstValidateScenario * scenario, GstValidateAction * action)
   ret = _execute_set_state (scenario, action);
 
   if (ret && duration)
-    g_timeout_add (duration * 1000,
+    g_timeout_add_in_current_thread (duration * 1000,
         (GSourceFunc) _pause_action_restore_playing, scenario);
 
   return ret;
@@ -759,7 +759,9 @@ _add_get_position_source (GstValidateScenario * scenario)
   GstValidateScenarioPrivate *priv = scenario->priv;
 
   if (priv->get_pos_id == 0 && priv->wait_id == 0) {
-    priv->get_pos_id = g_timeout_add (50, (GSourceFunc) get_position, scenario);
+    priv->get_pos_id =
+        g_timeout_add_in_current_thread (50, (GSourceFunc) get_position,
+        scenario);
 
     GST_DEBUG_OBJECT (scenario, "Start checking position again");
     return TRUE;
@@ -938,11 +940,11 @@ _execute_wait (GstValidateScenario * scenario, GstValidateAction * action)
   gst_validate_printf (action, "Waiting for %" GST_TIME_FORMAT "\n",
       GST_TIME_ARGS (duration));
   if (priv->get_pos_id) {
-    g_source_remove (priv->get_pos_id);
+    g_source_remove_in_current_thread (priv->get_pos_id);
     priv->get_pos_id = 0;
   }
 
-  priv->wait_id = g_timeout_add (duration / G_USEC_PER_SEC,
+  priv->wait_id = g_timeout_add_in_current_thread (duration / G_USEC_PER_SEC,
       (GSourceFunc) stop_waiting, scenario);
 
   return TRUE;
@@ -1245,12 +1247,12 @@ _pipeline_freed_cb (GstValidateScenario * scenario,
   GstValidateScenarioPrivate *priv = scenario->priv;
 
   if (priv->get_pos_id) {
-    g_source_remove (priv->get_pos_id);
+    g_source_remove_in_current_thread (priv->get_pos_id);
     priv->get_pos_id = 0;
   }
 
   if (priv->wait_id) {
-    g_source_remove (priv->wait_id);
+    g_source_remove_in_current_thread (priv->wait_id);
     priv->wait_id = 0;
   }
   scenario->pipeline = NULL;
