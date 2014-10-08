@@ -400,20 +400,20 @@ gst_validate_report_init (void)
   file_env = g_getenv ("GST_VALIDATE_FILE");
   log_pipelines = g_array_new (TRUE, TRUE, sizeof (PipelineLog));
   if (file_env != NULL && *file_env != '\0') {
-    gint i;
+    guint i;
     gchar **wanted_files;
     wanted_files = g_strsplit (file_env, "::", 0);
 
     /* FIXME: Make sure it is freed in the deinit function when that is
      * implemented */
     for (i = 0; i < g_strv_length (wanted_files); i++) {
-      PipelineLog plog = { 0, };
+      PipelineLog plog = { 0, 0, 0, 0};
 
       if (_create_pipeline_from_uri (wanted_files[i], &plog))
         g_array_append_val (log_pipelines, plog);
     }
   } else {
-    PipelineLog plog = { 0, };
+    PipelineLog plog = { 0, 0, 0, 0};
 
     if (_create_pipeline_from_uri ("stdout", &plog))
       g_array_append_val (log_pipelines, plog);
@@ -567,10 +567,42 @@ gst_validate_printf (gpointer source, const gchar * format, ...)
   va_end (var_args);
 }
 
+static void
+_print_string (GString * string)
+{
+  gint i;
+  gboolean clean_string = TRUE;
+  GstBuffer *buffer = NULL;
+
+  for (i = 0; i < log_pipelines->len; i++) {
+    GstFlowReturn res;
+    PipelineLog *plog = &g_array_index (log_pipelines,
+        PipelineLog, i);
+
+    if (plog->is_std) {
+      fprintf (plog->file, "%s", string->str);
+      fflush (plog->file);
+
+      continue;
+    }
+
+    if (buffer == NULL) {
+      buffer = gst_buffer_new_wrapped (g_strdup (string->str),
+          strlen (string->str) * sizeof (gchar));
+      clean_string = FALSE;
+    } else {
+      gst_buffer_ref (buffer);
+    }
+
+    g_signal_emit_by_name (plog->src, "push-buffer", buffer, &res);
+  }
+
+  g_string_free (string, clean_string);
+}
+
 void
 gst_validate_printf_valist (gpointer source, const gchar * format, va_list args)
 {
-  gint i;
   GString *string = g_string_new (NULL);
 
   if (source) {
@@ -704,24 +736,7 @@ gst_validate_printf_valist (gpointer source, const gchar * format, va_list args)
   }
 #endif
 
-  for (i = 0; i < log_pipelines->len; i++) {
-    GstFlowReturn res;
-    PipelineLog *plog = &g_array_index (log_pipelines,
-        PipelineLog, i);
-
-    if (plog->is_std) {
-      fprintf (plog->file, "%s", string->str);
-      fflush (plog->file);
-
-      continue;
-    }
-
-    g_signal_emit_by_name (plog->src, "push-buffer",
-        gst_buffer_new_wrapped (g_strdup (string->str),
-            strlen (string->str) * sizeof (gchar)), &res);
-  }
-
-  g_string_free (string, TRUE);
+  _print_string (string);
 }
 
 gboolean
@@ -754,40 +769,40 @@ gst_validate_report_set_master_report (GstValidateReport * report,
 }
 
 void
-gst_validate_report_print_level (GstValidateReport * report)
+gst_validate_report_append_level_to_string (GstValidateReport * report, GString *string)
 {
-  gst_validate_printf (NULL, "%10s : %s\n",
+  g_string_append_printf (string, "%10s : %s\n",
       gst_validate_report_level_get_name (report->level),
       report->issue->summary);
 }
 
 void
-gst_validate_report_print_detected_on (GstValidateReport * report)
+gst_validate_report_append_detected_on_to_string (GstValidateReport * report, GString *string)
 {
   GList *tmp;
 
-  gst_validate_printf (NULL, "%*s Detected on <%s",
+  g_string_append_printf (string, "%*s Detected on <%s",
       12, "", gst_validate_reporter_get_name (report->reporter));
   for (tmp = report->shadow_reports; tmp; tmp = tmp->next) {
     GstValidateReport *shadow_report = (GstValidateReport *) tmp->data;
-    gst_validate_printf (NULL, ", %s",
+    g_string_append_printf (string, ", %s",
         gst_validate_reporter_get_name (shadow_report->reporter));
   }
-  gst_validate_printf (NULL, ">\n");
+  g_string_append_printf (string, ">\n");
 }
 
 void
-gst_validate_report_print_details (GstValidateReport * report)
+gst_validate_report_append_details_to_string (GstValidateReport * report, GString *string)
 {
   if (report->message)
-    gst_validate_printf (NULL, "%*s Details : %s\n", 12, "", report->message);
+    g_string_append_printf (string, "%*s Details : %s\n", 12, "", report->message);
 }
 
 void
-gst_validate_report_print_description (GstValidateReport * report)
+gst_validate_report_append_description_to_string (GstValidateReport * report, GString *string)
 {
   if (report->issue->description)
-    gst_validate_printf (NULL, "%*s Description : %s\n", 12, "",
+    g_string_append_printf (string, "%*s Description : %s\n", 12, "",
         report->issue->description);
 }
 
@@ -795,17 +810,20 @@ void
 gst_validate_report_printf (GstValidateReport * report)
 {
   GList *tmp;
+  GString *string = g_string_new (NULL);
 
-  gst_validate_report_print_level (report);
-  gst_validate_report_print_detected_on (report);
-  gst_validate_report_print_details (report);
+  gst_validate_report_append_level_to_string (report, string);
+  gst_validate_report_append_detected_on_to_string (report, string);
+  gst_validate_report_append_details_to_string (report, string);
 
   for (tmp = report->repeated_reports; tmp; tmp = tmp->next) {
-    gst_validate_report_print_details (report);
+    gst_validate_report_append_details_to_string (report, string);
   }
 
-  gst_validate_report_print_description (report);
-  gst_validate_printf (NULL, "\n");
+  gst_validate_report_append_description_to_string (report, string);
+  g_string_append_printf (string, "\n");
+
+  _print_string (string);
 }
 
 void
@@ -843,5 +861,4 @@ gst_validate_report_deinit (void)
   }
 
   g_array_unref (log_pipelines);
-}
 }

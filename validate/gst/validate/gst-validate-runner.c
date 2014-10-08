@@ -424,28 +424,32 @@ _do_report_synthesis (GstValidateRunner * runner)
   g_hash_table_iter_init (&iter, runner->priv->reports_by_type);
   while (g_hash_table_iter_next (&iter, &key, &value)) {
     GstValidateReport *report;
+    GString * report_str = g_string_new (NULL);
+
     reports = (GList *) value;
 
     if (!reports)
       continue;
 
     report = (GstValidateReport *) (reports->data);
-    gst_validate_report_print_level (report);
-    gst_validate_report_print_detected_on (report);
+    gst_validate_report_append_level_to_string (report, report_str);
+    gst_validate_report_append_detected_on_to_string (report, report_str);
 
     if (report->level == GST_VALIDATE_REPORT_LEVEL_CRITICAL)
       criticals = g_list_append (criticals, report);
 
     for (tmp = g_list_next (reports); tmp; tmp = tmp->next) {
       report = (GstValidateReport *) (tmp->data);
-      gst_validate_report_print_detected_on (report);
+      gst_validate_report_append_detected_on_to_string (report, report_str);
 
       if (report->level == GST_VALIDATE_REPORT_LEVEL_CRITICAL)
         criticals = g_list_append (criticals, report);
     }
     report = (GstValidateReport *) (reports->data);
-    gst_validate_report_print_description (report);
-    gst_validate_printf (NULL, "\n");
+    gst_validate_report_append_description_to_string (report, report_str);
+    gst_validate_printf (NULL, "%s\n", report_str->str);
+
+    g_string_free (report_str, TRUE);
   }
 
   return criticals;
