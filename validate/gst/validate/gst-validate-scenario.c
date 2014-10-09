@@ -1759,10 +1759,12 @@ gst_validate_list_scenarios (gchar ** scenarios, gint num_scenarios,
 
 done:
   result = g_key_file_to_data (kf, &datalength, &err);
-  g_print ("All scenarios avalaible:\n%s", result);
-
-  if (output_file && !err)
+  if (output_file && !err) {
     g_file_set_contents (output_file, result, datalength, &err);
+  } else {
+    gst_validate_printf (NULL, "All scenarios avalaible:\n%s", result);
+  }
+  g_free (result);
 
   if (env_scenariodir)
     g_strfreev (env_scenariodir);
