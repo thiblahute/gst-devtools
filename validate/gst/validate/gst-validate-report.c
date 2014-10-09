@@ -460,6 +460,7 @@ gst_validate_report_init (void)
     newline_regex =
         g_regex_new ("\n", G_REGEX_OPTIMIZE | G_REGEX_MULTILINE, 0, NULL);
 #endif
+
 }
 
 GstValidateIssue *
