@@ -219,6 +219,9 @@ void gst_validate_report_set_reporting_level (GstValidateReport *report, GstVali
 void gst_validate_report_add_repeated_report (GstValidateReport *report, GstValidateReport *repeated_report);
 GstValidateReportLevel gst_validate_report_level_from_name (const gchar *issue_name);
 
+typedef void (*GstValidatePrintFunc) (GString *str);
+void gst_validate_report_add_print_func (GstValidatePrintFunc func);
+
 G_END_DECLS
 
 #endif /* __GST_VALIDATE_REPORT_H__ */
