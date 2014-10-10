@@ -206,10 +206,10 @@ class GESRenderTest(GESTest, GstValidateEncodingTestInterface):
 class GESTestsManager(TestsManager):
     name = "ges"
 
-    _scenarios = ScenarioManager()
-
     def __init__(self):
         super(GESTestsManager, self).__init__()
+        self._scenarios = ScenarioManager()
+
 
     def init(self):
         try:
@@ -246,6 +246,7 @@ Available options:""")
 
     def set_settings(self, options, args, reporter):
         TestsManager.set_settings(self, options, args, reporter)
+        self._scenarios.set_config(options)
 
         try:
             os.makedirs(utils.url2path(options.dest)[0])
