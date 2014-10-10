@@ -36,15 +36,6 @@ from utils import path2url, DEFAULT_TIMEOUT, which, \
 # Private global variables     #
 #
 
-# definitions of commands to use
-GST_VALIDATE_COMMAND = "gst-validate-1.0"
-GST_VALIDATE_TRANSCODING_COMMAND = "gst-validate-transcoding-1.0"
-G_V_DISCOVERER_COMMAND = "gst-validate-media-check-1.0"
-if "win32" in sys.platform:
-    GST_VALIDATE_COMMAND += ".exe"
-    GST_VALIDATE_TRANSCODING_COMMAND += ".exe"
-    G_V_DISCOVERER_COMMAND += ".exe"
-
 AUDIO_ONLY_FILE_TRANSCODING_RATIO = 5
 
 #
@@ -76,7 +67,8 @@ class GstValidateMediaCheckTestsGenerator(GstValidateTestsGenerator):
 
             classname = "validate.%s.media_check.%s" % (protocol,
                                                         os.path.basename(uri).replace(".", "_"))
-            self.add_test(GstValidateMediaCheckTest(classname,
+            self.add_test(GstValidateMediaCheckTest(self.test_manager.G_V_DISCOVERER_COMMAND,
+                                                    classname,
                                                     self.test_manager.options,
                                                     self.test_manager.reporter,
                                                     mediainfo.media_descriptor,
@@ -100,12 +92,14 @@ class GstValidateTranscodingTestsGenerator(GstValidateTestsGenerator):
                                                                 str(comb).replace(
                                                                     ' ', '_'),
                                                                 mediainfo.media_descriptor.get_clean_name())
-                self.add_test(GstValidateTranscodingTest(classname,
-                                                         self.test_manager.options,
-                                                         self.test_manager.reporter,
-                                                         comb,
-                                                         uri,
-                                                         mediainfo.media_descriptor))
+                self.add_test(GstValidateTranscodingTest(
+                        self.test_manager.GST_VALIDATE_TRANSCODING_COMMAND,
+                        classname,
+                        self.test_manager.options,
+                        self.test_manager.reporter,
+                        comb,
+                        uri,
+                        mediainfo.media_descriptor))
 
 
 class GstValidatePipelineTestsGenerator(GstValidateTestsGenerator):
@@ -151,7 +145,7 @@ class GstValidatePipelineTestsGenerator(GstValidateTestsGenerator):
         for name, pipeline in self._pipelines_descriptions:
             for scenario in scenarios:
                 fname = self.get_fname(scenario, name=name)
-                self.add_test(GstValidateLaunchTest(fname,
+                self.add_test(GstValidateLaunchTest(self.test_manager.GST_VALIDATE_COMMAND,
                                                     self.test_manager.options,
                                                     self.test_manager.reporter,
                                                     pipeline,
@@ -194,7 +188,8 @@ class GstValidatePlaybinTestsGenerator(GstValidatePipelineTestsGenerator):
                     # 10MB so we can reverse playback
                     cpipe += " ring-buffer-max-size=10485760"
 
-                self.add_test(GstValidateLaunchTest(fname,
+                self.add_test(GstValidateLaunchTest(self.test_manager.GST_VALIDATE_COMMAND,
+                                                    fname,
                                                     self.test_manager.options,
                                                     self.test_manager.reporter,
                                                     cpipe,
@@ -269,7 +264,8 @@ class GstValidateMixerTestsGenerator(GstValidatePipelineTestsGenerator):
 
                 self.debug("Adding: %s", fname)
 
-                self.add_test(GstValidateLaunchTest(fname,
+                self.add_test(GstValidateLaunchTest(self.test_manager.GST_VALIDATE_COMMAND,
+                                                    fname,
                                                     self.test_manager.options,
                                                     self.test_manager.reporter,
                                                     pipe,
@@ -278,8 +274,7 @@ class GstValidateMixerTestsGenerator(GstValidatePipelineTestsGenerator):
 
 
 class GstValidateLaunchTest(GstValidateTest):
-
-    def __init__(self, classname, options, reporter, pipeline_desc,
+    def __init__(self, command, classname, options, reporter, pipeline_desc,
                  timeout=DEFAULT_TIMEOUT, scenario=None, media_descriptor=None):
         try:
             timeout = GST_VALIDATE_PROTOCOL_TIMEOUTS[
@@ -288,18 +283,17 @@ class GstValidateLaunchTest(GstValidateTest):
             pass
         except AttributeError:
             pass
-
+        assert(command)
         duration = 0
         if scenario:
             duration = scenario.get_duration()
         elif media_descriptor:
             duration = media_descriptor.get_duration() / GST_SECOND
-        super(
-            GstValidateLaunchTest, self).__init__(GST_VALIDATE_COMMAND, classname,
-                                                  options, reporter,
-                                                  duration=duration,
-                                                  scenario=scenario,
-                                                  timeout=timeout)
+        super(GstValidateLaunchTest, self).__init__(command, classname,
+                                                    options, reporter,
+                                                    duration=duration,
+                                                    scenario=scenario,
+                                                    timeout=timeout)
 
         self.pipeline_desc = pipeline_desc
         self.media_descriptor = media_descriptor
@@ -333,13 +327,11 @@ class GstValidateLaunchTest(GstValidateTest):
 
 
 class GstValidateMediaCheckTest(Test):
-
-    def __init__(self, classname, options, reporter, media_descriptor,
-                 uri, minfo_path, timeout=DEFAULT_TIMEOUT):
-        super(
-            GstValidateMediaCheckTest, self).__init__(G_V_DISCOVERER_COMMAND, classname,
-                                                      options, reporter,
-                                                      timeout=timeout)
+    def __init__(self, command, classname, options, reporter, media_descriptor, uri, minfo_path,
+                 timeout=DEFAULT_TIMEOUT):
+        super(GstValidateMediaCheckTest, self).__init__(command, classname,
+                                                        options, reporter,
+                                                        timeout=timeout)
         self._uri = uri
         self.media_descriptor = media_descriptor
         self._media_info_path = minfo_path
@@ -350,9 +342,7 @@ class GstValidateMediaCheckTest(Test):
 
 
 class GstValidateTranscodingTest(GstValidateTest, GstValidateEncodingTestInterface):
-    scenarios_manager = ScenarioManager()
-
-    def __init__(self, classname, options, reporter,
+    def __init__(self, command, classname, options, reporter,
                  combination, uri, media_descriptor,
                  timeout=DEFAULT_TIMEOUT,
                  scenario=None):
@@ -373,14 +363,13 @@ class GstValidateTranscodingTest(GstValidateTest, GstValidateEncodingTestInterfa
         except KeyError:
             pass
 
-        super(
-            GstValidateTranscodingTest, self).__init__(GST_VALIDATE_TRANSCODING_COMMAND,
-                                                       classname,
-                                                       options,
-                                                       reporter,
-                                                       duration=duration,
-                                                       timeout=timeout,
-                                                       scenario=scenario)
+        super(GstValidateTranscodingTest, self).__init__(command,
+                                                         classname,
+                                                         options,
+                                                         reporter,
+                                                         duration=duration,
+                                                         timeout=timeout,
+                                                         scenario=scenario)
 
         GstValidateEncodingTestInterface.__init__(
             self, combination, media_descriptor)
@@ -452,8 +441,18 @@ class GstValidateTestManager(GstValidateBaseTestManager):
     GstValidateMediaCheckTest = GstValidateMediaCheckTest
     GstValidateTranscodingTest = GstValidateTranscodingTest
 
+    GST_VALIDATE_COMMAND = "gst-validate-1.0"
+    GST_VALIDATE_TRANSCODING_COMMAND = "gst-validate-transcoding-1.0"
+    G_V_DISCOVERER_COMMAND = "gst-validate-media-check-1.0"
+
+    if "win32" in sys.platform:
+        self.GST_VALIDATE_COMMAND += ".exe"
+        self.GST_VALIDATE_TRANSCODING_COMMAND += ".exe"
+        self.G_V_DISCOVERER_COMMAND += ".exe"
+
     def __init__(self):
         super(GstValidateTestManager, self).__init__()
+
         self._uris = []
         self._run_defaults = True
         self._is_populated = False
@@ -461,7 +460,7 @@ class GstValidateTestManager(GstValidateBaseTestManager):
                  "validate", "validate_testsuite.py"), globals())
 
     def init(self):
-        if which(GST_VALIDATE_COMMAND) and which(GST_VALIDATE_TRANSCODING_COMMAND):
+        if which(self.GST_VALIDATE_COMMAND) and which(self.GST_VALIDATE_TRANSCODING_COMMAND):
             return True
         return False
 
@@ -533,9 +532,9 @@ not been tested and explicitely activated if you set use --wanted-tests ALL""")
 
     def _discover_file(self, uri, fpath):
         try:
-            media_info = "%s.%s" % (
-                fpath, GstValidateMediaDescriptor.MEDIA_INFO_EXT)
-            args = G_V_DISCOVERER_COMMAND.split(" ")
+            media_info = "%s.%s" % (fpath,
+                                    GstValidateMediaDescriptor.MEDIA_INFO_EXT)
+            args = self.G_V_DISCOVERER_COMMAND.split(" ")
             args.append(uri)
             if os.path.isfile(media_info):
                 self._add_media(media_info, uri)
@@ -609,10 +608,4 @@ not been tested and explicitely activated if you set use --wanted-tests ALL""")
         except ValueError:
             pass
 
-        super(GstValidateTestManager, self).set_settings(
-            options, args, reporter)
-
-
-def gst_validate_checkout_element_present(element_name):
-    null = open(os.devnull)
-    return subprocess.call("gst-inspect-1.0 videmixer", shell=True, stdout=null, stderr=null)
+        super(GstValidateTestManager, self).set_settings(options, args, reporter)

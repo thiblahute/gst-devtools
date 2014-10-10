@@ -947,23 +947,23 @@ class Scenario(object):
 
 
 class ScenarioManager(Loggable):
-    _instance = None
-    all_scenarios = []
-
     FILE_EXTENDION = "scenario"
     GST_VALIDATE_COMMAND = "gst-validate-1.0"
     if "win32" in sys.platform:
         GST_VALIDATE_COMMAND += ".exe"
 
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(ScenarioManager, cls).__new__(
-                cls, *args, **kwargs)
-            cls._instance.config = None
-            cls._instance.discovered = False
-            Loggable.__init__(cls._instance)
+    def __init__(self, validate_command=None):
+        if validate_command is None:
+            self.validate_command = self.GST_VALIDATE_COMMAND
+        else:
+            self.validate_command = validate_command
 
-        return cls._instance
+        self.discovered = False
+        self.all_scenarios = []
+        self.config = None
+
+    def set_config(self, config):
+        self.config = config
 
     def find_special_scenarios(self, mfile):
         scenarios = []
@@ -992,8 +992,7 @@ class ScenarioManager(Loggable):
                 os.path.join(self.config.logsdir, "scenarios_discovery.log"), 'w')
 
         try:
-            command = [self.GST_VALIDATE_COMMAND,
-                       "--scenarios-defs-output-file", scenario_defs]
+            command = [self.validate_command, "--scenarios-defs-output-file", scenario_defs]
             command.extend(scenario_paths)
             subprocess.check_call(command, stdout=logs, stderr=logs)
         except subprocess.CalledProcessError:
@@ -1039,10 +1038,14 @@ class ScenarioManager(Loggable):
 
 
 class GstValidateBaseTestManager(TestsManager):
-    scenarios_manager = ScenarioManager()
+    GST_VALIDATE_COMMAND = None
+    GST_VALIDATE_TRANSCODING_COMMAND = None
+    G_V_DISCOVERER_COMMAND = None
 
     def __init__(self):
         super(GstValidateBaseTestManager, self).__init__()
+        self.scenarios_manager = ScenarioManager()
+
         self._scenarios = []
         self._encoding_formats = []
 
@@ -1057,6 +1060,11 @@ class GstValidateBaseTestManager(TestsManager):
             self._scenarios.extend(scenarios)
         else:
             self._scenarios.append(scenarios)
+
+    def set_settings(self, options, args, reporter):
+        self.scenarios_manager.set_config(options)
+
+        super(GstValidateBaseTestManager, self).set_settings(options, args, reporter)
 
     def get_scenarios(self):
         return self._scenarios
