@@ -336,7 +336,11 @@ user argument, you can thus overrides command line options using that.
     if options.logsdir is None:
         options.logsdir = os.path.join(options.output_dir, "logs")
     if options.xunit_file is None:
-        options.xunit_file = os.path.join(options.logsdir, "xunit.xml")
+        if options.logsdir in ['stdout', 'stderr']:
+            options.xunit_file = "xunit.xml"
+        else:
+            options.xunit_file = os.path.join(options.logsdir, "xunit.xml")
+
     if options.dest is None:
         options.dest = os.path.join(options.output_dir, "rendered")
 
