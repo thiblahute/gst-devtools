@@ -64,8 +64,9 @@ class GstValidateMediaCheckTestsGenerator(GstValidateTestsGenerator):
             except KeyError:
                 timeout = DEFAULT_TIMEOUT
 
-            classname = "validate.%s.media_check.%s" % (protocol,
-                                                        os.path.basename(uri).replace(".", "_"))
+            classname = "%s.%s.media_check.%s" % (self.test_manager.name,
+                                                  protocol,
+                                                  os.path.basename(uri).replace(".", "_"))
             self.add_test(GstValidateMediaCheckTest(self.test_manager.G_V_DISCOVERER_COMMAND,
                                                     classname,
                                                     self.test_manager.options,
@@ -86,7 +87,9 @@ class GstValidateTranscodingTestsGenerator(GstValidateTestsGenerator):
                 continue
 
             for comb in self.test_manager.get_encoding_formats():
-                classname = "validate.%s.transcode.to_%s.%s" % (mediainfo.media_descriptor.get_protocol(),
+                classname = "%s.%s.transcode.to_%s.%s" % (
+                    self.test_manager.name,
+                    mediainfo.media_descriptor.get_protocol(),
                                                                 str(comb).replace(' ', '_'),
                                                                 mediainfo.media_descriptor.get_clean_name())
                 self.add_test(GstValidateTranscodingTest(
@@ -124,9 +127,9 @@ class GstValidatePipelineTestsGenerator(GstValidateTestsGenerator):
             protocol_str = ""
 
         if scenario is not None and scenario.name.lower() != "none":
-            return "%s.%s%s.%s" % ("validate", protocol_str, name, scenario.name)
+            return "%s.%s%s.%s" % (self.test_manager.name, protocol_str, name, scenario.name)
 
-        return "%s.%s%s" % ("validate", protocol_str, name)
+        return "%s.%s%s" % (self.test_manager.name, protocol_str, name)
 
     def generate_tests(self, uri_minfo_special_scenarios, scenarios):
 
