@@ -241,10 +241,16 @@ class Test(Loggable):
             self.wait_process()
         except KeyboardInterrupt:
             self.process.send_signal(signal.SIGINT)
+            while self.process.poll() is None:
+                self.info("Sleep! (%s)", self.process.pid)
+                time.sleep(1)
             raise
 
         try:
             self.process.send_signal(signal.SIGINT)
+            while self.process.poll() is None:
+                self.info("Sleep! (%s)", self.process.pid)
+                time.sleep(1)
         except OSError:
             pass
 
