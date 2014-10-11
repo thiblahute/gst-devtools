@@ -17,15 +17,16 @@
 # Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 
+import collections
 import errno
 import sys
 import re
 import os
 import fnmatch
+import threading
 import time
 import types
 import traceback
-import thread
 
 
 # environment variables controlling levels for each category
@@ -43,7 +44,6 @@ _log_handlers = []
 _log_handlers_limited = []
 
 _initialized = False
-_enableCrackOutput = False
 
 _stdout = None
 _stderr = None
@@ -56,7 +56,7 @@ _old_hup_handler = None
  FIXME,
  INFO,
  DEBUG,
- LOG) = range(1, 7)
+ LOG) = list(range(1, 7))
 
 COLORS = {ERROR: 'RED',
           WARN: 'YELLOW',
@@ -69,7 +69,7 @@ _FORMATTED_LEVELS = []
 _LEVEL_NAMES = ['ERROR', 'WARN', 'FIXME', 'INFO', 'DEBUG', 'LOG']
 
 
-class TerminalController(object):
+class TerminalController:
 
     """
     A class that can be used to portably generate formatted output to
@@ -179,36 +179,36 @@ class TerminalController(object):
         # Look up string capabilities.
         for capability in self._STRING_CAPABILITIES:
             (attrib, cap_name) = capability.split('=')
-            setattr(self, attrib, self._tigetstr(cap_name) or '')
+            setattr(self, attrib, self._tigetstr(cap_name) or b'')
 
         # Colors
         set_fg = self._tigetstr('setf')
         if set_fg:
-            for i, color in zip(range(len(self._COLORS)), self._COLORS):
-                setattr(self, color, curses.tparm(set_fg, i) or '')
+            for i, color in zip(list(range(len(self._COLORS))), self._COLORS):
+                setattr(self, color, curses.tparm(set_fg, i) or b'')
         set_fg_ansi = self._tigetstr('setaf')
         if set_fg_ansi:
-            for i, color in zip(range(len(self._ANSICOLORS)),
+            for i, color in zip(list(range(len(self._ANSICOLORS))),
                                 self._ANSICOLORS):
-                setattr(self, color, curses.tparm(set_fg_ansi, i) or '')
+                setattr(self, color, curses.tparm(set_fg_ansi, i) or b'')
         set_bg = self._tigetstr('setb')
         if set_bg:
-            for i, color in zip(range(len(self._COLORS)), self._COLORS):
-                setattr(self, 'BG_' + color, curses.tparm(set_bg, i) or '')
+            for i, color in zip(list(range(len(self._COLORS))), self._COLORS):
+                setattr(self, 'BG_' + color, curses.tparm(set_bg, i) or b'')
         set_bg_ansi = self._tigetstr('setab')
         if set_bg_ansi:
-            for i, color in zip(range(len(self._ANSICOLORS)),
+            for i, color in zip(list(range(len(self._ANSICOLORS))),
                                 self._ANSICOLORS):
                 setattr(
-                    self, 'BG_' + color, curses.tparm(set_bg_ansi, i) or '')
+                    self, 'BG_' + color, curses.tparm(set_bg_ansi, i) or b'')
 
     def _tigetstr(self, cap_name):
         # String capabilities can include "delays" of the form "$<2>".
         # For any modern terminal, we should be able to just ignore
         # these, so strip them out.
         import curses
-        cap = curses.tigetstr(cap_name) or ''
-        return re.sub(r'\$<\d+>[/*]?', '', cap)
+        cap = curses.tigetstr(cap_name) or b''
+        return re.sub(r'\$<\d+>[/*]?', '', cap.decode()).encode()
 
     def render(self, template):
         """
@@ -282,7 +282,7 @@ def getLevelName(level):
     @return: The name of the level
     @rtype: str
     """
-    assert isinstance(level, int) and level > 0 and level < 6, \
+    assert isinstance(level, int) and level > 0 and level < 7, \
         TypeError("Bad debug level")
     return getLevelNames()[level - 1]
 
@@ -429,19 +429,19 @@ def getFileLine(where=-1):
     @param where: how many frames to go back up, or function
     @type  where: int (negative) or function
 
-    @return: tuple of (file, line)
-    @rtype:  tuple of (str, int)
+    @return: tuple of (file, line, function_name)
+    @rtype:  tuple of (str, int, str)
     """
     co = None
     lineno = None
     name = None
 
     if isinstance(where, types.FunctionType):
-        co = where.func_code
+        co = where.__code__
         lineno = co.co_firstlineno
         name = co.co_name
     elif isinstance(where, types.MethodType):
-        co = where.im_func.func_code
+        co = where.__func__.__code__
         lineno = co.co_firstlineno
         name = co.co_name
     else:
@@ -449,10 +449,6 @@ def getFileLine(where=-1):
         while stackFrame:
             co = stackFrame.f_code
             if not co.co_filename.endswith('loggable.py'):
-                # wind up the stack according to frame
-                while where < -1:
-                    stackFrame = stackFrame.f_back
-                    where += 1
                 co = stackFrame.f_code
                 lineno = stackFrame.f_lineno
                 name = co.co_name
@@ -460,7 +456,7 @@ def getFileLine(where=-1):
             stackFrame = stackFrame.f_back
 
     if not co:
-        return "<unknown file>", 0
+        return "<unknown file>", 0, None
 
     return scrubFilename(co.co_filename), lineno, name
 
@@ -486,7 +482,7 @@ def getFormatArgs(startFormat, startArgs, endFormat, endArgs, args, kwargs):
     for a in args:
         debugArgs.append(ellipsize(a))
 
-    for items in kwargs.items():
+    for items in list(kwargs.items()):
         debugArgs.extend(items)
     debugArgs.extend(endArgs)
     format = startFormat \
@@ -521,41 +517,28 @@ def doLog(level, object, category, format, args, where=-1, filePath=None, line=N
         message = format % args
     else:
         message = format
+    funcname = None
 
-    # first all the unlimited ones
-    if _log_handlers:
+    if level > getCategoryLevel(category):
+        handlers = _log_handlers
+    else:
+        handlers = _log_handlers + _log_handlers_limited
+
+    if handlers:
         if filePath is None and line is None:
             (filePath, line, funcname) = getFileLine(where=where)
         ret['filePath'] = filePath
         ret['line'] = line
         if funcname:
             message = "\033[00m\033[32;01m%s:\033[00m %s" % (funcname, message)
-        for handler in _log_handlers:
+        for handler in handlers:
             try:
-                handler(level, object, category, file, line, message)
-            except TypeError, e:
+                handler(level, object, category, filePath, line, message)
+            except TypeError as e:
                 raise SystemError("handler %r raised a TypeError: %s" % (
                     handler, getExceptionMessage(e)))
 
-    if level > getCategoryLevel(category):
-        return ret
-
-    if _log_handlers_limited:
-        if filePath is None and line is None:
-            (filePath, line, funcname) = getFileLine(where=where)
-        ret['filePath'] = filePath
-        ret['line'] = line
-        if funcname:
-            message = "\033[00m\033[32;01m%s:\033[00m %s" % (funcname, message)
-        for handler in _log_handlers_limited:
-            # set this a second time, just in case there weren't unlimited
-            # loggers there before
-            try:
-                handler(level, object, category, filePath, line, message)
-            except TypeError:
-                raise SystemError("handler %r raised a TypeError" % handler)
-
-        return ret
+    return ret
 
 
 def errorObject(object, cat, format, *args):
@@ -565,9 +548,6 @@ def errorObject(object, cat, format, *args):
     """
     doLog(ERROR, object, cat, format, args)
 
-    # we do the import here because having it globally causes weird import
-    # errors if our gstreactor also imports .log, which brings in errors
-    # and pb stuff
     if args:
         raise SystemExit(format % args)
     else:
@@ -619,7 +599,7 @@ def safeprintf(file, format, *args):
             file.write(format % args)
         else:
             file.write(format)
-    except IOError, e:
+    except IOError as e:
         if e.errno == errno.EPIPE:
             # if our output is closed, exit; e.g. when logging over an
             # ssh connection and the ssh connection is closed
@@ -657,32 +637,33 @@ def stderrHandler(level, object, category, file, line, message):
         # 5 + 1 + 7 + 1 + 32 + 1 + 17 + 1 + 15 == 80
         safeprintf(
             sys.stderr, '%s [%5d] [0x%12x] %-32s %-17s %-15s %-4s %s %s\n',
-            getFormattedLevelName(level), os.getpid(), thread.get_ident(),
+            getFormattedLevelName(level), os.getpid(),
+            threading.current_thread().ident,
             o[:32], category, time.strftime("%b %d %H:%M:%S"), "",
             message, where)
     sys.stderr.flush()
 
 
-def _colored_formatter(level):
-    format = '%-5s'
-
-    t = TerminalController()
-    return ''.join((t.BOLD, getattr(t, COLORS[level]),
-                    format % (_LEVEL_NAMES[level - 1], ), t.NORMAL))
-
-
-def _formatter(level):
+def logLevelName(level):
     format = '%-5s'
     return format % (_LEVEL_NAMES[level - 1], )
 
 
-def _preformatLevels(noColorEnvVarName):
-    if (noColorEnvVarName is not None
-        and (noColorEnvVarName not in os.environ
-             or not os.environ[noColorEnvVarName])):
-        formatter = _colored_formatter
+def _preformatLevels(enableColorOutput):
+
+    if enableColorOutput:
+        t = TerminalController()
+
+        if type(t.BOLD) == bytes:
+            formatter = lambda level: ''.join(
+                (t.BOLD.decode(), getattr(t, COLORS[level]).decode(),
+                 logLevelName(level), t.NORMAL.decode()))
+        else:
+            formatter = lambda level: ''.join(
+                (t.BOLD, getattr(t, COLORS[level]),
+                 logLevelName(level), t.NORMAL))
     else:
-        formatter = _formatter
+        formatter = lambda level: logLevelName(level)
 
     for level in ERROR, WARN, FIXME, INFO, DEBUG, LOG:
         _FORMATTED_LEVELS.append(formatter(level))
@@ -692,7 +673,7 @@ def _preformatLevels(noColorEnvVarName):
 # setup functions
 
 
-def init(envVarName, enableColorOutput=False, enableCrackOutput=True):
+def init(envVarName, enableColorOutput=True, enableCrackOutput=True):
     """
     Initialize the logging system and parse the environment variable
     of the given name.
@@ -708,10 +689,7 @@ def init(envVarName, enableColorOutput=False, enableCrackOutput=True):
     global _ENV_VAR_NAME
     _ENV_VAR_NAME = envVarName
 
-    if enableColorOutput:
-        _preformatLevels(envVarName + "_NO_COLOR")
-    else:
-        _preformatLevels(None)
+    _preformatLevels(enableColorOutput)
 
     if envVarName in os.environ:
         # install a log handler that uses the value of the environment var
@@ -780,7 +758,7 @@ def addLogHandler(func):
     @raises TypeError: if func is not a callable
     """
 
-    if not callable(func):
+    if not isinstance(func, collections.Callable):
         raise TypeError("func must be callable")
 
     if func not in _log_handlers:
@@ -799,7 +777,7 @@ def addLimitedLogHandler(func):
 
     @raises TypeError: TypeError if func is not a callable
     """
-    if not callable(func):
+    if not isinstance(func, collections.Callable):
         raise TypeError("func must be callable")
 
     if func not in _log_handlers_limited:
@@ -895,7 +873,7 @@ def reopenOutputFiles():
         return
 
     def reopen(name, fileno, *args):
-        oldmask = os.umask(0026)
+        oldmask = os.umask(0o026)
         try:
             f = open(name, 'a+', *args)
         finally:
@@ -935,7 +913,7 @@ def outputToFiles(stdout=None, stderr=None):
             _old_hup_handler(signum, frame)
 
     debug('log', 'installing SIGHUP handler')
-    import signal
+    from . import signal
     handler = signal.signal(signal.SIGHUP, sighup)
     if handler == signal.SIG_DFL or handler == signal.SIG_IGN:
         _old_hup_handler = None
@@ -963,8 +941,7 @@ class BaseLoggable(object):
         marker to multiple elements at a time helps debugging.
         @param marker: A string write to the log.
         @type marker: str
-        @param level: The log level. It can be log.WARN, log.INFO,
-        log.DEBUG, log.ERROR or log.LOG.
+        @param level: The log level. It can be log.ERROR, etc.
         @type  level: int
         """
         logHandlers = {WARN: self.warning,
@@ -1042,23 +1019,6 @@ class BaseLoggable(object):
         return doLog(level, self.logObjectName(), self.logCategory,
                      format, args, where=where, **kwargs)
 
-    def warningFailure(self, failure, swallow=True):
-        """
-        Log a warning about a Twisted Failure. Useful as an errback handler:
-        d.addErrback(self.warningFailure)
-
-        @param swallow: whether to swallow the failure or not
-        @type  swallow: bool
-        """
-        if _canShortcutLogging(self.logCategory, WARN):
-            if swallow:
-                return
-            return failure
-        warningObject(self.logObjectName(), self.logCategory,
-                      *self.logFunction(getFailureMessage(failure)))
-        if not swallow:
-            return failure
-
     def logFunction(self, *args):
         """Overridable log function.  Default just returns passed message."""
         return args
@@ -1074,146 +1034,6 @@ class BaseLoggable(object):
 
     def handleException(self, exc):
         self.warning(getExceptionMessage(exc))
-
-# Twisted helper stuff
-
-# private stuff
-_initializedTwisted = False
-
-# make a singleton
-__theTwistedLogObserver = None
-
-
-def _getTheTwistedLogObserver():
-    # used internally and in test
-    global __theTwistedLogObserver
-
-    if not __theTwistedLogObserver:
-        __theTwistedLogObserver = TwistedLogObserver()
-
-    return __theTwistedLogObserver
-
-
-# public helper methods
-
-
-def getFailureMessage(failure):
-    """
-    Return a short message based on L{twisted.python.failure.Failure}.
-    Tries to find where the exception was triggered.
-    """
-    exc = str(failure.type)
-    msg = failure.getErrorMessage()
-    if len(failure.frames) == 0:
-        return "failure %(exc)s: %(msg)s" % locals()
-
-    (func, filename, line, some, other) = failure.frames[-1]
-    filename = scrubFilename(filename)
-    return "failure %(exc)s at %(filename)s:%(line)s: %(func)s(): %(msg)s" % locals()
-
-
-def warningFailure(failure, swallow=True):
-    """
-    Log a warning about a Failure. Useful as an errback handler:
-    d.addErrback(warningFailure)
-
-    @param swallow: whether to swallow the failure or not
-    @type  swallow: bool
-    """
-    warning('', getFailureMessage(failure))
-    if not swallow:
-        return failure
-
-
-def logTwisted():
-    """
-    Integrate twisted's logger with our logger.
-
-    This is done in a separate method because calling this imports and sets
-    up a reactor.  Since we want basic logging working before choosing a
-    reactor, we need to separate these.
-    """
-    global _initializedTwisted
-
-    if _initializedTwisted:
-        return
-
-    debug('log', 'Integrating twisted logger')
-
-    # integrate twisted's logging with us
-    from twisted.python import log as tlog
-
-    # this call imports the reactor
-    # that is why we do this in a separate method
-    from twisted.spread import pb
-
-    # we don't want logs for pb.Error types since they
-    # are specifically raised to be handled on the other side
-    observer = _getTheTwistedLogObserver()
-    observer.ignoreErrors([pb.Error, ])
-    tlog.startLoggingWithObserver(observer.emit, False)
-
-    _initializedTwisted = True
-
-
-# we need an object as the observer because startLoggingWithObserver
-# expects a bound method
-
-
-class TwistedLogObserver(BaseLoggable):
-
-    """
-    Twisted log observer that integrates with our logging.
-    """
-    logCategory = "logobserver"
-
-    def __init__(self):
-        self._ignoreErrors = []  # Failure types
-
-    def emit(self, eventDict):
-        method = log  # by default, lowest level
-        edm = eventDict['message']
-        if not edm:
-            if eventDict['isError'] and 'failure' in eventDict:
-                f = eventDict['failure']
-                for failureType in self._ignoreErrors:
-                    r = f.check(failureType)
-                    if r:
-                        self.debug("Failure of type %r, ignoring", failureType)
-                        return
-
-                self.log("Failure %r" % f)
-
-                method = debug  # tracebacks from errors at debug level
-                msg = "A twisted traceback occurred."
-                if getCategoryLevel("twisted") < WARN:
-                    msg += "  Run with debug level >= 2 to see the traceback."
-                # and an additional warning
-                warning('twisted', msg)
-                text = f.getTraceback()
-                safeprintf(sys.stderr, "\nTwisted traceback:\n")
-                safeprintf(sys.stderr, text + '\n')
-            elif 'format' in eventDict:
-                text = eventDict['format'] % eventDict
-            else:
-                # we don't know how to log this
-                return
-        else:
-            text = ' '.join(map(str, edm))
-
-        fmtDict = {'system': eventDict['system'],
-                   'text': text.replace("\n", "\n\t")}
-        msgStr = " [%(system)s] %(text)s\n" % fmtDict
-        # because msgstr can contain %, as in a backtrace, make sure we
-        # don't try to splice it
-        method('twisted', msgStr)
-
-    def ignoreErrors(self, *types):
-        for failureType in types:
-            self._ignoreErrors.append(failureType)
-
-    def clearIgnores(self):
-        self._ignoreErrors = []
 
 
 class Loggable(BaseLoggable):
