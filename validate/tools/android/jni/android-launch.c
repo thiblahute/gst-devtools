@@ -183,7 +183,6 @@ android_launch_init (JNIEnv * env, jobject thiz, jstring jargs)
   app->launch = gst_validate_android_new (&app_context);
 
   SET_CUSTOM_DATA (env, thiz, app_data_field_id, app);
-  gst_debug_set_threshold_for_name ("android-launch", GST_LEVEL_DEBUG);
   GST_DEBUG ("Created GstValidateLaunch at %p", app);
   app->app = (*env)->NewGlobalRef (env, thiz);
   GST_DEBUG ("Created GlobalRef for app object at %p", app->app);
