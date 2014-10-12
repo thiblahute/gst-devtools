@@ -169,7 +169,7 @@ public class GstValidateLaunch extends Activity implements SurfaceHolder.Callbac
             out.close();
             out = null;
         } catch (Exception e) {
-            Log.e("tag", e.getMessage());
+            Log.e("GStreamer", e.getMessage());
         }
 
     }

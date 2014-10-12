@@ -212,7 +212,7 @@ priv_gst_debug_logcat (GstDebugCategory * category, GstDebugLevel level,
       break;
   }
 
-  tag = g_strdup_printf ("GStreamer+%s (%s)",
+  tag = g_strdup_printf ("GStreamer",
       gst_debug_category_get_name (category), level_str);
 
   if (object) {
@@ -228,16 +228,16 @@ priv_gst_debug_logcat (GstDebugCategory * category, GstDebugLevel level,
       obj = g_strdup_printf ("<%p>", object);
     }
 
-    m = g_strdup_printf ("%" GST_TIME_FORMAT " %p %s:%d:%s:%s %s",
-        GST_TIME_ARGS (elapsed), g_thread_self (), file, line, function, obj,
-        gst_debug_message_get (message));
+    m = g_strdup_printf ("%s %" GST_TIME_FORMAT " %p %s:%d:%s:%s %s",
+        level_str, GST_TIME_ARGS (elapsed), g_thread_self (), file, line,
+        function, obj, gst_debug_message_get (message));
     g_free (obj);
   } else {
     m = g_strdup_printf ("%" GST_TIME_FORMAT " %p %s:%d:%s %s\n",
         GST_TIME_ARGS (elapsed), g_thread_self (),
         file, line, function, gst_debug_message_get (message));
   }
-  __android_log_print (ANDROID_LOG_INFO, tag, m);
+  __android_log_print (ANDROID_LOG_ERROR, tag, m);
   g_free (tag);
   g_free (m);
 }
@@ -371,9 +371,8 @@ clock_lost_cb (GstBus * bus, GstMessage * msg, GstValidateAndroid * self)
 static void
 request_state_cb (GstBus * bus, GstMessage * msg, GstValidateAndroid * self)
 {
-  g_print ("Requesting state!!");
   if (GST_IS_VALIDATE_SCENARIO (GST_MESSAGE_SRC (msg))) {
-    g_print (".... GO!");
+    GST_DEBUG ("Validate requested exit, doing it");
     gst_validate_android_clean_pipeline (self);
   }
 }
@@ -691,7 +690,6 @@ _set_parametters (GstValidateAndroid * self)
     g_print ("Letting scenario handle set state\n");
   }
 
-done:
   return G_SOURCE_REMOVE;
 }
 
@@ -702,7 +700,6 @@ _ensure_context (GstValidateAndroid * self)
   if (self->context == NULL) {
     self->context = g_main_context_new ();
     g_main_context_push_thread_default (self->context);
-    g_print ("Pushing maincontext %p in %p", self->context, g_thread_self ());
   }
   G_UNLOCK (context_exists);
 }
@@ -758,7 +755,6 @@ gst_validate_android_init (gpointer user_data)
 {
   GST_DEBUG_CATEGORY_INIT (debug_category, "gst-launch-remote", 0,
       "GstValidateAndroid");
-  gst_debug_set_threshold_for_name ("gst-launch-remote", GST_LEVEL_DEBUG);
 
   g_set_print_handler (priv_glib_print_handler);
   g_set_printerr_handler (priv_glib_printerr_handler);
@@ -768,8 +764,6 @@ gst_validate_android_init (gpointer user_data)
   gst_debug_remove_log_function_by_data (NULL);
   gst_debug_add_log_function ((GstLogFunction) priv_gst_debug_logcat, NULL,
       NULL);
-
-  gst_debug_set_active (FALSE);
 
   start_time = gst_util_get_timestamp ();
 

@@ -35,11 +35,24 @@ DEFAULT_READING_COMMAND = "adb shell logcat -c && adb shell logcat -v raw -s"
 
 class ReadAdbLogs(loggable.Loggable):
 
-    def __init__(self, category):
+    def __init__(self, category, outputfile=sys.stdout, check_envvar=None):
         loggable.Loggable.__init__(self)
 
-        self.out = sys.stdout
+        if check_envvar is not None:
+            tmp = os.environ.get(check_envvar)
+            if tmp is not None:
+                outputfile = tmp
+
+        self._set_output(outputfile)
         self.category = category
+
+    def _set_output(self, outputfile):
+        if isinstance(outputfile, str):
+            self.debug("Using %s as output" % outputfile)
+            self.out = open(outputfile, 'w')
+            self.out.truncate()
+        else:
+            self.out = outputfile
 
     def start(self):
         command = DEFAULT_READING_COMMAND + " " + self.category
@@ -97,15 +110,6 @@ class ReadValidateAdbLogs(ReadAdbLogs):
         self.category = "GstValidateOutput"
         self.retcode = None
         self.retmessage = None
-
-
-    def _set_output(self, outputfile):
-        if isinstance(outputfile, str):
-            self.debug("Using %s as output" % outputfile)
-            self.out = open(outputfile, 'w')
-            self.out.truncate()
-        else:
-            self.out = outputfile
 
     def start(self):
         command = DEFAULT_READING_COMMAND + " " + self.category
@@ -193,6 +197,7 @@ class GstValidateAndroid(loggable.Loggable):
         self.force_clean = False
         self.validate_logs = None
         self.glib_logs = None
+        self.gst_logs = None
 
     def _remote_is_running(self):
         try:
@@ -226,6 +231,7 @@ class GstValidateAndroid(loggable.Loggable):
                 pass
         self.validate_logs.stop(self.force_clean)
         self.glib_logs.stop(self.force_clean)
+        self.gst_logs.stop(self.force_clean)
 
         for i in range(len(sys.argv)):
             if sys.argv[i] == "--scenarios-defs-output-file":
@@ -245,6 +251,12 @@ class GstValidateAndroid(loggable.Loggable):
 
         self.glib_logs = ReadAdbLogs("GLib")
         self.glib_logs.start()
+
+        self.gst_logs = ReadAdbLogs("GStreamer", check_envvar="GST_DEBUG_FILE")
+        self.gst_logs.start()
+
+        if os.environ.get("GST_DEBUG"):
+            sys.argv.extend(["--gst-debug", os.environ.get("GST_DEBUG")])
 
         try:
             if sys.argv[1] != "validate":
