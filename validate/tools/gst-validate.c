@@ -28,12 +28,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <gst/gst.h>
 #include <gio/gio.h>
-#include <gst/validate/validate.h>
 #include <gst/validate/gst-validate-scenario.h>
 #include <gst/validate/gst-validate-utils.h>
 #include <gst/validate/media-descriptor-parser.h>
+
+#include "gst-validate.h"
 
 #ifdef G_OS_UNIX
 #include <glib-unix.h>
@@ -362,21 +362,15 @@ _register_playbin_actions (void)
 /* *INDENT-ON* */
 }
 
-int
-main (int argc, gchar ** argv)
+GstElement *
+gst_validate_build_pipeline (int argc, gchar ** argv, gchar ** error,
+    GstValidateRunner ** runner, GstValidateMonitor ** monitor,
+    GOptionEntry * extra_options)
 {
   GError *err = NULL;
-  const gchar *scenario = NULL, *configs = NULL, *media_info = NULL;
-  gboolean list_scenarios = FALSE, monitor_handles_state,
-      inspect_action_type = FALSE;
-  GstStateChangeReturn sret;
   gchar *output_file = NULL;
-  gint ret = 0;
-
-#ifdef G_OS_UNIX
-  guint signal_watch_id;
-#endif
-  int rep_err;
+  const gchar *scenario = NULL, *configs = NULL, *media_info = NULL;
+  gboolean list_scenarios = FALSE, inspect_action_type = FALSE;
 
   GOptionEntry options[] = {
     {"set-scenario", '\0', 0, G_OPTION_ARG_STRING, &scenario,
@@ -407,11 +401,15 @@ main (int argc, gchar ** argv)
   };
   GOptionContext *ctx;
   gchar **argvn;
-  GstValidateRunner *runner;
-  GstValidateMonitor *monitor;
-  GstBus *bus;
 
+  *error = NULL;
+  *runner = NULL;
+  *monitor = NULL;
+
+#ifdef HAVE_CONFIG_H
   g_set_prgname ("gst-validate-" GST_API_VERSION);
+#endif
+
   ctx = g_option_context_new ("PIPELINE-DESCRIPTION");
   g_option_context_add_main_entries (ctx, options, NULL);
   g_option_context_set_summary (ctx, "Runs a gst launch pipeline, adding "
@@ -420,16 +418,21 @@ main (int argc, gchar ** argv)
       " the env var GST_DEBUG=validate:2 and it will be printed "
       "as gstreamer debugging");
 
+  if (extra_options)
+    g_option_context_add_main_entries (ctx, extra_options, NULL);
+
   if (argc == 1) {
     g_print ("%s", g_option_context_get_help (ctx, FALSE, NULL));
-    exit (1);
+
+    return NULL;
   }
 
   if (!g_option_context_parse (ctx, &argc, &argv, &err)) {
-    g_printerr ("Error initializing: %s\n", err->message);
+    *error = g_strdup_printf ("Error initializing: %s", err->message);
+
     g_option_context_free (ctx);
     g_clear_error (&err);
-    exit (1);
+    return NULL;
   }
 
   if (scenario || configs) {
@@ -449,25 +452,27 @@ main (int argc, gchar ** argv)
 
   if (list_scenarios || output_file) {
     if (gst_validate_list_scenarios (argv + 1, argc - 1, output_file))
-      return 1;
-    return 0;
+      *error = g_strdup ("Could not list scenarios");
+
+    return NULL;
   }
 
   if (inspect_action_type) {
     _register_playbin_actions ();
 
-    if (!gst_validate_print_action_types ((const gchar **) argv + 1, argc - 1)) {
-      GST_ERROR ("Could not print all wanted types");
-      return -1;
-    }
+    if (!gst_validate_print_action_types ((const gchar **) argv + 1, argc - 1))
+      *error = g_strdup ("Could not print all wanted types");
 
-    return 0;
+    return NULL;
   }
 
   if (argc == 1) {
     g_print ("%s", g_option_context_get_help (ctx, FALSE, NULL));
     g_option_context_free (ctx);
-    exit (1);
+
+    *error = g_strdup ("Wrong parametters");
+
+    return NULL;
   }
 
   g_option_context_free (ctx);
@@ -478,11 +483,12 @@ main (int argc, gchar ** argv)
   pipeline = (GstElement *) gst_parse_launchv ((const gchar **) argvn, &err);
   g_free (argvn);
   if (!pipeline) {
-    g_print ("Failed to create pipeline: %s\n",
-        err ? err->message : "unknown reason");
+    *error = g_strdup_printf ("Unable to build pipeline: %s", err->message);
     g_clear_error (&err);
-    exit (1);
+
+    return NULL;
   }
+
   if (!GST_IS_PIPELINE (pipeline)) {
     GstElement *new_pipeline = gst_pipeline_new ("");
 
@@ -491,41 +497,78 @@ main (int argc, gchar ** argv)
   }
 
   gst_pipeline_set_auto_flush_bus (GST_PIPELINE (pipeline), FALSE);
-#ifdef G_OS_UNIX
-  signal_watch_id =
-      g_unix_signal_add (SIGINT, (GSourceFunc) intr_handler, pipeline);
-#endif
 
   if (_is_playbin_pipeline (argc, argv + 1)) {
     _register_playbin_actions ();
   }
 
-  runner = gst_validate_runner_new ();
-  if (!runner) {
-    g_printerr ("Failed to setup Validate Runner\n");
-    exit (1);
+  *runner = gst_validate_runner_new ();
+  if (!*runner) {
+    *error = g_strdup ("Failed to setup Validate Runner");
   }
 
-  monitor = gst_validate_monitor_factory_create (GST_OBJECT_CAST (pipeline),
-      runner, NULL);
-  gst_validate_reporter_set_handle_g_logs (GST_VALIDATE_REPORTER (monitor));
+  *monitor = gst_validate_monitor_factory_create (GST_OBJECT_CAST (pipeline),
+      *runner, NULL);
+  gst_validate_reporter_set_handle_g_logs (GST_VALIDATE_REPORTER (*monitor));
 
   if (media_info) {
     GError *err = NULL;
-    GstMediaDescriptorParser *parser = gst_media_descriptor_parser_new (runner,
+    GstMediaDescriptorParser *parser = gst_media_descriptor_parser_new (*runner,
         media_info, &err);
 
     if (parser == NULL) {
-      GST_ERROR ("Could not use %s as a media-info file (error: %s)",
+      *error = g_strdup_printf ("Could not use %s as a media-info file (error: %s)",
           media_info, err ? err->message : "Unknown error");
-
-      exit (1);
+      gst_object_unref (pipeline);
+      gst_object_unref (*monitor);
+      gst_object_unref (*runner);
+      return NULL;
     }
 
-    gst_validate_monitor_set_media_descriptor (monitor,
+    gst_validate_monitor_set_media_descriptor (*monitor,
         GST_MEDIA_DESCRIPTOR (parser));
     gst_object_unref (parser);
   }
+
+
+  return pipeline;
+}
+
+#ifndef __ANDROID__
+int
+main (int argc, gchar ** argv)
+{
+  gint ret = 0;
+  int rep_err;
+  GstBus *bus;
+  gchar *error;
+  GstStateChangeReturn sret;
+  GstValidateRunner *runner;
+  GstValidateMonitor *monitor;
+  gboolean monitor_handles_state;
+#ifdef G_OS_UNIX
+  guint signal_watch_id;
+#endif
+
+
+  pipeline = gst_validate_build_pipeline (argc, argv, &error,
+      &runner, &monitor, NULL);
+  if (pipeline == NULL) {
+    if (error) {
+      g_printerr ("%s\n", error);
+      g_free (error);
+
+      exit (-1);
+    }
+
+    exit (0);
+  }
+#ifdef G_OS_UNIX
+  {
+    signal_watch_id =
+        g_unix_signal_add (SIGINT, (GSourceFunc) intr_handler, pipeline);
+  }
+#endif
 
   mainloop = g_main_loop_new (NULL, FALSE);
   bus = gst_element_get_bus (pipeline);
@@ -578,7 +621,6 @@ exit:
   g_object_unref (pipeline);
   g_object_unref (runner);
   g_object_unref (monitor);
-  g_clear_error (&err);
   gst_validate_deinit ();
 #ifdef G_OS_UNIX
   g_source_remove (signal_watch_id);
@@ -588,3 +630,4 @@ exit:
       ret == 0 ? "PASSED" : "FAILED", ret);
   return ret;
 }
+#endif
