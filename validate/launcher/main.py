@@ -18,6 +18,7 @@
 # Boston, MA 02110-1301, USA.
 import os
 import utils
+import atexit
 import urlparse
 import loggable
 import argparse
@@ -320,6 +321,7 @@ user argument, you can thus overrides command line options using that.
 
     tests_launcher = _TestsLauncher(libsdir)
     tests_launcher.add_options(parser)
+    atexit.register(tests_launcher.clean)
 
     (options, args) = parser.parse_known_args()
 
