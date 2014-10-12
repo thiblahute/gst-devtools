@@ -629,6 +629,9 @@ class TestsManager(Loggable):
     def init(self):
         return False
 
+    def clean(self):
+        pass
+
     def list_tests(self):
         return sorted(list(self.tests))
 
@@ -795,6 +798,10 @@ class _TestsLauncher(Loggable):
             else:
                 self.warning("Can not init tester: %s -- PATH is %s"
                              % (tester.name, os.environ["PATH"]))
+
+    def clean(self):
+        for tester in self.testers:
+            tester.clean()
 
     def add_options(self, parser):
         for tester in self.testers:
