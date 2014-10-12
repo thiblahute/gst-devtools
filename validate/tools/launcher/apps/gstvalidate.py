@@ -19,6 +19,7 @@
 import os
 import sys
 import time
+import tempfile
 import urlparse
 import subprocess
 import ConfigParser
@@ -481,8 +482,10 @@ not been tested and explicitely activated if you set use --wanted-tests ALL""")
             return self.tests
 
         if self._run_defaults:
-            scenarios = [self.scenarios_manager.get_scenario(scenario_name)
-                         for scenario_name in self.get_scenarios()]
+            scenarios = [scenario for scenario in
+                          [self.scenarios_manager.get_scenario(scenario_name)
+                           for scenario_name in self.get_scenarios()]
+                         if scenario is not None]
         else:
             scenarios = self.scenarios_manager.get_scenario(None)
         uris = self._list_uris()
@@ -598,3 +601,175 @@ not been tested and explicitely activated if you set use --wanted-tests ALL""")
             pass
 
         super(GstValidateTestManager, self).set_settings(options, args, reporter)
+
+class GstValidateAndroidTestManager(GstValidateBaseTestManager):
+
+    name = "validateandroid"
+
+    # List of all classes to create testsuites
+    GstValidateMediaCheckTestsGenerator = GstValidateMediaCheckTestsGenerator
+    GstValidateTranscodingTestsGenerator = GstValidateTranscodingTestsGenerator
+    GstValidatePipelineTestsGenerator = GstValidatePipelineTestsGenerator
+    GstValidatePlaybinTestsGenerator = GstValidatePlaybinTestsGenerator
+    GstValidateMixerTestsGenerator = GstValidateMixerTestsGenerator
+    GstValidateLaunchTest = GstValidateLaunchTest
+    GstValidateMediaCheckTest = GstValidateMediaCheckTest
+    GstValidateTranscodingTest = GstValidateTranscodingTest
+
+    GST_VALIDATE_COMMAND = "gst-validate-android"
+    GST_VALIDATE_TRANSCODING_COMMAND = "FIXME!"
+    G_V_DISCOVERER_COMMAND = "gst-validate-media-check-1.0"
+    if "win32" in sys.platform:
+        self.G_V_DISCOVERER_COMMAND += ".exe"
+
+    def __init__(self):
+        super(GstValidateAndroidTestManager, self).__init__()
+        self._uris = []
+        self._run_defaults = True
+        self._is_populated = False
+        self._temp_scenariodir = None
+        self.scenarios_manager = ScenarioManager(self.GST_VALIDATE_COMMAND)
+
+        execfile(os.path.join(os.path.dirname(__file__), "apps",
+                 "validate", "validate_android_testsuite.py"), globals())
+
+    def init(self):
+        if which(self.GST_VALIDATE_COMMAND):
+            return True
+        return False
+
+    def add_options(self, parser):
+        group = parser.add_argument_group("GstValidateAndroid tools specific options"
+                " and behaviours",
+                description="""When using --wanted-tests, all the scenarios can be used, even those which have
+                not been tested and explicitely activated if you set use --wanted-tests ALL""")
+
+    def populate_testsuite(self):
+
+        if self._is_populated is True:
+            return
+
+        if not self.options.config:
+            if self._run_defaults:
+                self.register_defaults()
+            else:
+                self.register_all()
+
+        self._is_populated = True
+
+    def list_tests(self):
+        if self.tests:
+            return self.tests
+
+        if self._run_defaults:
+            scenarios = [scenario for scenario in
+                          [self.scenarios_manager.get_scenario(scenario_name)
+                           for scenario_name in self.get_scenarios()]
+                         if scenario is not None]
+        else:
+            scenarios = self.scenarios_manager.get_scenario(None)
+        uris = self._list_uris()
+
+        for generator in self.get_generators():
+            for test in generator.generate_tests(uris, scenarios):
+                self.add_test(test)
+
+        return self.tests
+
+    def _add_media(self, media_info, uri=None):
+        self.debug("Checking %s", media_info)
+        if isinstance(media_info, GstValidateMediaDescriptor):
+            media_descriptor = media_info
+            media_info = media_descriptor.get_path()
+        else:
+            media_descriptor = GstValidateMediaDescriptor(media_info)
+
+        try:
+            # Just testing that the vairous mandatory infos are present
+            caps = media_descriptor.get_caps()
+            if uri is None:
+                uri = media_descriptor.get_uri()
+
+            media_descriptor.set_protocol(urlparse.urlparse(uri).scheme)
+            for caps2, prot in GST_VALIDATE_CAPS_TO_PROTOCOL:
+                if caps2 == caps:
+                    media_descriptor.set_protocol(prot)
+                    break
+
+            scenario_bname = media_descriptor.get_media_filepath()
+            special_scenarios = self.scenarios_manager.find_special_scenarios(scenario_bname)
+            self._uris.append((uri,
+                               NamedDic({"path": media_info,
+                                         "media_descriptor": media_descriptor}),
+                               special_scenarios))
+        except ConfigParser.NoOptionError as e:
+            self.debug("Exception: %s for %s", e, media_info)
+
+    def _discover_file(self, uri, fpath):
+        tmpfile = os.path.join(self._temp_scenariodir,
+                               os.path.basename(fpath))
+        if not os.path.exists(tmpfile):
+            command = "adb pull %s %s" % (fpath, tmpfile)
+            printc("Copying %s to %s\n   $ %s" % (fpath, tmpfile, command),
+                   Colors.OKBLUE)
+            subprocess.check_output(command, shell=True, stderr=open(os.devnull))
+
+        self._add_media(tmpfile,
+                        uri.replace(GstValidateMediaDescriptor.MEDIA_INFO_EXT, ''))
+
+    def _list_uris(self):
+        if self._uris:
+            return self._uris
+
+        if not self.args:
+            self._temp_scenariodir = os.path.join(tempfile.gettempdir(),
+                                                  "gst-validate-android")
+            try:
+                os.mkdir(self._temp_scenariodir)
+            except OSError:
+                pass
+
+            if isinstance(self.options.paths, str):
+                self.options.paths = [os.path.join(self.options.paths)]
+
+            folder = "/sdcard/gst-qa-assets/"
+            last_folder = None
+            files = subprocess.check_output("adb shell ls -R %s |grep 'media_info\|%s'"
+                                            % (folder, folder.replace('/', '\/')),
+                                            shell=True)
+            for f in files.split('\n'):
+                f = re.sub(":\r$|\r$", '', f)
+                if not f.endswith("media_info"):
+                    last_folder = re.sub(":$", '', f)
+                    continue
+
+                self._discover_file(path2url(os.path.join(last_folder, f)),
+                                    os.path.join(last_folder, f))
+
+        self.debug("Uris found: %s", self._uris)
+
+        return self._uris
+
+    def needs_http_server(self):
+        for test in self.list_tests():
+            if self._is_test_wanted(test) and test.media_descriptor is not None:
+                protocol = test.media_descriptor.get_protocol()
+                uri = test.media_descriptor.get_uri()
+
+                if protocol in [Protocols.HTTP, Protocols.HLS, Protocols.DASH] and \
+                    "127.0.0.1:%s" % (self.options.http_server_port) in uri:
+                    return True
+        return False
+
+    def set_settings(self, options, args, reporter):
+        if options.wanted_tests:
+            for i in range(len(options.wanted_tests)):
+                if "ALL" in options.wanted_tests[i]:
+                    self._run_defaults = False
+                    options.wanted_tests[i] = options.wanted_tests[i].replace("ALL", "")
+        try:
+            options.wanted_tests.remove("")
+        except ValueError:
+            pass
+
+        super(GstValidateAndroidTestManager, self).set_settings(options, args, reporter)
