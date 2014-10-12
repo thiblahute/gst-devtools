@@ -20,6 +20,7 @@
  */
 
 #include "gst-validate-android.h"
+#include "../../gst-validate.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -187,7 +188,7 @@ priv_gst_debug_logcat (GstDebugCategory * category, GstDebugLevel level,
 {
   GstClockTime elapsed;
   const gchar *level_str;
-  gchar *tag, *m;
+  gchar *m;
 
   if (level > gst_debug_category_get_threshold (category))
     return;
@@ -212,8 +213,6 @@ priv_gst_debug_logcat (GstDebugCategory * category, GstDebugLevel level,
       break;
   }
 
-  tag = g_strdup_printf ("GStreamer",
-      gst_debug_category_get_name (category), level_str);
 
   if (object) {
     gchar *obj;
@@ -228,17 +227,18 @@ priv_gst_debug_logcat (GstDebugCategory * category, GstDebugLevel level,
       obj = g_strdup_printf ("<%p>", object);
     }
 
-    m = g_strdup_printf ("%s %" GST_TIME_FORMAT " %p %s:%d:%s:%s %s",
-        level_str, GST_TIME_ARGS (elapsed), g_thread_self (), file, line,
-        function, obj, gst_debug_message_get (message));
+    m = g_strdup_printf ("%" GST_TIME_FORMAT
+        "      %p      %s      %s %s:%d:%s:%s %s", GST_TIME_ARGS (elapsed),
+        g_thread_self (), level_str, gst_debug_category_get_name (category),
+        file, line, function, obj, gst_debug_message_get (message));
     g_free (obj);
   } else {
-    m = g_strdup_printf ("%" GST_TIME_FORMAT " %p %s:%d:%s %s\n",
-        GST_TIME_ARGS (elapsed), g_thread_self (),
+    m = g_strdup_printf ("%" GST_TIME_FORMAT
+        "      %p      %s      %s %s:%d:%s: %s", GST_TIME_ARGS (elapsed),
+        g_thread_self (), level_str, gst_debug_category_get_name (category),
         file, line, function, gst_debug_message_get (message));
   }
-  __android_log_print (ANDROID_LOG_ERROR, tag, m);
-  g_free (tag);
+  __android_log_print (ANDROID_LOG_ERROR, "GStreamer", m);
   g_free (m);
 }
 
@@ -477,167 +477,41 @@ check_initialization_complete (GstValidateAndroid * self)
 }
 
 static gboolean
-_set_parametters (GstValidateAndroid * self)
+parse_debug (const gchar * opt, const gchar * arg, gpointer data, GError ** err)
 {
-  gint argc;
+
+  gst_debug_set_threshold_from_string (arg, FALSE);
+
+  return TRUE;
+}
+
+static gboolean
+_set_validate_parametters (GstValidateAndroid * self, gint argc, gchar ** argv)
+{
   GstBus *bus;
+  gchar *error;
   GSource *bus_source;
-  GError *err = NULL;
-  gchar **argv;
-  gchar *output_file = NULL;
-  const gchar *scenario = NULL, *configs = NULL, validate_output;
-  gboolean list_scenarios = FALSE, monitor_handles_state,
-      list_action_types = FALSE;
-
-  GOptionEntry options[] = {
-    {"set-scenario", '\0', 0, G_OPTION_ARG_STRING, &scenario,
-        "Let you set a scenario, it can be a full path to a scenario file"
-          " or the name of the scenario (name of the file without the"
-          " '.scenario' extension).", NULL},
-    {"list-scenarios", 'l', 0, G_OPTION_ARG_NONE, &list_scenarios,
-        "List the avalaible scenarios that can be run", NULL},
-    {"scenarios-defs-output-file", '\0', 0, G_OPTION_ARG_FILENAME,
-          &output_file, "The output file to store scenarios details. "
-          "Implies --list-scenario",
-        NULL},
-    {"list-action-types", 't', 0, G_OPTION_ARG_NONE, &list_action_types,
-        "List the avalaible action types with which to write scenarios", NULL},
-    {"set-configs", '\0', 0, G_OPTION_ARG_STRING, &configs,
-          "Let you set a config scenario, the scenario needs to be set as 'config"
-          "' you can specify a list of scenario separated by ':'"
-          " it will override the GST_VALIDATE_SCENARIO environment variable,",
-        NULL},
-    {"set-validate-output", '\0', 0, G_OPTION_ARG_STRING, &validate_output,
-        "Set the output file of GstValidate", NULL},
-    {NULL}
+  gboolean monitor_handles_state;
+  GOptionEntry entries[] = {
+    {"gst-debug", 0, 0, G_OPTION_ARG_CALLBACK, (gpointer) parse_debug,
+          "Comma-separated list of category_name:level pairs to set "
+          "specific levels for the individual categories. Example: "
+          "GST_AUTOPLUG:5,GST_ELEMENT_*:3",
+        "LIST"},
+    {NULL},
   };
-  GOptionContext *ctx;
 
-  if (!self->args) {
-    gst_validate_android_clean_pipeline (self);
+  self->pipeline = gst_validate_build_pipeline (argc, argv, &error,
+      &self->runner, &self->monitor, entries);
 
-    return G_SOURCE_REMOVE;
-  }
+  if (self->pipeline == NULL) {
+    if (error) {
+      __fake_exit (self, -1, error);
 
-  argv = g_strsplit (self->args, " ", -1);
-  for (argc = 0; argv[argc]; argc++);
-
-  ctx = g_option_context_new ("PIPELINE-DESCRIPTION");
-  g_option_context_add_main_entries (ctx, options, NULL);
-
-  g_option_context_parse_strv (ctx, &argv, &err);
-  g_option_context_free (ctx);
-  if (err) {
-    set_message (self, "Unable to build pipeline '%s': %s", self->args,
-        err->message);
-    g_clear_error (&err);
-
-    return G_SOURCE_REMOVE;
-  }
-
-  g_setenv ("GST_VALIDATE_SCENARIOS_PATH",
-      "/data/data/org.freedesktop.gstvalidate/scenarios/", TRUE);
-  if (scenario || configs) {
-    gchar *scenarios;
-
-    if (scenario)
-      scenarios = g_strjoin (":", scenario, configs, NULL);
-    else
-      scenarios = g_strdup (configs);
-
-    g_setenv ("GST_VALIDATE_SCENARIO", scenarios, TRUE);
-
-    g_free (scenarios);
-  }
-
-
-  if (!self->validate_initialized) {
-    g_print ("%p Context is: %p", g_thread_self (), self->context);
-    gst_validate_init ();
-    gst_validate_report_add_print_func (priv_validate_print);
-    self->validate_initialized = TRUE;
-  }
-
-  for (argc = 0; argv[argc]; argc++);
-  if (list_scenarios || output_file) {
-    gint ret = 0;
-    const gchar *message = NULL;
-    gboolean wanted_f = !output_file;
-
-    set_message (self, "Listing scenarios");
-    /* NOTE: We alway put the file listing scenarios in
-     * /sdcard/scenarios and that is reused by the python
-     * launcher
-     */
-    output_file = "/sdcard/scenarios";
-    if (gst_validate_list_scenarios (argv + 1, argc - 1, output_file)) {
-      if (wanted_f) {
-        gint i;
-        GError *error = NULL;
-        gchar *content, **lines;
-
-        if (!g_file_get_contents (output_file, &content, NULL, error)) {
-          gst_validate_printf (NULL, "ERROR: Could not list scenarios: %s\n",
-              error ? error->message : "Unkown");
-        } else {
-
-          lines = g_strsplit (content, "\n", -1);
-          for (i = 0; lines[i]; i++) {
-            gst_validate_printf (NULL, "%s", lines[i]);
-          }
-        }
-      }
-    } else {
-      ret = 18;
-      message = "Could no list scenarios";
+      g_free (error);
     }
-
-    /* Just let the user notice the message about scenario listing *
-       /* Just let the user notice the message about scenario listing */
-    g_usleep (G_USEC_PER_SEC);
-    __fake_exit (self, ret, message);
-
-    return G_SOURCE_REMOVE;
+    __fake_exit (self, -1, NULL);
   }
-
-  if (list_action_types) {
-    gint i, ret = 0;
-    const gchar *message = NULL;
-
-    if (!gst_validate_print_action_types ((const gchar **) argv + 1, i)) {
-      message = "Could not print all wanted types";
-      ret = -1;
-    }
-
-    __fake_exit (self, ret, message);
-    return G_SOURCE_REMOVE;
-  }
-
-  self->pipeline =
-      (GstElement *) gst_parse_launchv ((const gchar **) argv + 1, &err);
-
-  if (err) {
-    gchar *message = g_strdup_printf ("Unable to build pipeline '%s': %s",
-        self->args, err->message);
-    set_message (self, message);
-
-    __fake_exit (self, -1, message);
-    g_free (message);
-    g_clear_error (&err);
-
-    return G_SOURCE_REMOVE;
-  }
-
-  self->runner = gst_validate_runner_new ();
-  if (!self->runner) {
-    __fake_exit (self, -1, "Failed to setup Validate Runner");
-
-    return G_SOURCE_REMOVE;
-  }
-
-  self->monitor =
-      gst_validate_monitor_factory_create (GST_OBJECT_CAST (self->pipeline),
-      self->runner, NULL);
 
   bus = gst_element_get_bus (self->pipeline);
   bus_source = gst_bus_create_watch (bus);
@@ -693,6 +567,30 @@ _set_parametters (GstValidateAndroid * self)
   return G_SOURCE_REMOVE;
 }
 
+static gboolean
+_set_parametters (GstValidateAndroid * self)
+{
+  gint argc;
+  gchar **argv, *issue;
+
+  if (!self->args) {
+    __fake_exit (self, -1, issue);
+    return G_SOURCE_REMOVE;
+  }
+
+  argv = g_strsplit (self->args, " ", -1);
+  for (argc = 0; argv[argc]; argc++);
+
+  if (g_strcmp0 (argv[0], "validate") == 0)
+    return _set_validate_parametters (self, argc, argv);
+
+  issue = g_strdup_printf ("Unknown tool: %s", argv[0]);
+  __fake_exit (self, -1, issue);
+
+  g_free (issue);
+  g_strfreev (argv);
+}
+
 static void
 _ensure_context (GstValidateAndroid * self)
 {
@@ -722,6 +620,10 @@ gst_validate_android_main (gpointer user_data)
 
   GST_DEBUG ("GstValidateAndroid main %p", self);
 
+  g_setenv ("GST_VALIDATE_SCENARIOS_PATH",
+      "/data/data/org.freedesktop.gstvalidate/scenarios/", TRUE);
+
+  gst_validate_report_add_print_func (priv_validate_print);
   /* Create our own GLib Main Context and make it the default one */
   _ensure_context (self);
 

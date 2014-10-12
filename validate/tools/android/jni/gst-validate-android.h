@@ -29,8 +29,6 @@
 #include <gst/validate/gst-validate-scenario.h>
 #include <gst/validate/gst-validate-utils.h>
 
-#define PORT 9123
-
 typedef struct {
   gpointer app;
   void (*set_message) (const gchar *message, gpointer app);
