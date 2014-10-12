@@ -916,6 +916,10 @@ class Scenario(object):
         for prop, value in props:
             setattr(self, prop.replace("-", "_"), value)
 
+
+    def __str__(self):
+        return "%s -- %s" % (self.name, self.path)
+
     def get_execution_name(self):
         if self.path is not None:
             return self.path
@@ -966,6 +970,7 @@ class ScenarioManager(Loggable):
         GST_VALIDATE_COMMAND += ".exe"
 
     def __init__(self, validate_command=None):
+        Loggable.__init__(self)
         if validate_command is None:
             self.validate_command = self.GST_VALIDATE_COMMAND
         else:
