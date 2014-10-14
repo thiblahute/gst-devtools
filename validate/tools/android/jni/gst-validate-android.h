@@ -65,6 +65,9 @@ typedef struct {
   GstValidateRunner *runner;
   GstValidateMonitor *monitor;
 
+  gchar *position;
+  GString *message;
+
   gboolean is_transcoder;
   gboolean is_launch;
 } GstValidateAndroid;
