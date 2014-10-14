@@ -646,29 +646,26 @@ _set_parametters (GstValidateAndroid * self)
 static void
 _ensure_context (GstValidateAndroid * self)
 {
-  G_LOCK (context_exists);
   if (self->context == NULL) {
     self->context = g_main_context_new ();
     g_main_context_push_thread_default (self->context);
   }
-  G_UNLOCK (context_exists);
 }
 
 void
 gst_validate_android_set_parametters (GstValidateAndroid * self, gchar * args)
 {
+  G_LOCK (context_exists);
   self->args = g_strdup (args);
-
-  _ensure_context (self);
-
-  g_main_context_invoke (self->context, (GSourceFunc) _set_parametters, self);
+  if (self->context != NULL)
+    g_main_context_invoke (self->context, (GSourceFunc) _set_parametters, self);
+  G_UNLOCK (context_exists);
 }
 
 static gpointer
 gst_validate_android_main (gpointer user_data)
 {
   GstValidateAndroid *self = user_data;
-  GError *err = NULL;
 
   GST_DEBUG ("GstValidateAndroid main %p", self);
 
@@ -678,11 +675,18 @@ gst_validate_android_main (gpointer user_data)
   fault_setup ();
   gst_validate_report_add_print_func (priv_validate_print);
   /* Create our own GLib Main Context and make it the default one */
+
+  G_LOCK (context_exists);
   _ensure_context (self);
 
-  GST_DEBUG ("Starting main loop");
   self->main_loop = g_main_loop_new (self->context, FALSE);
+  if (self->args)
+    g_main_context_invoke (self->context, (GSourceFunc) _set_parametters, self);
+  G_UNLOCK (context_exists);
+
   check_initialization_complete (self);
+
+  GST_DEBUG ("Starting main loop %p in %p", self->main_loop, self->context);
   g_main_loop_run (self->main_loop);
   GST_DEBUG ("Exited main loop");
   g_main_loop_unref (self->main_loop);
