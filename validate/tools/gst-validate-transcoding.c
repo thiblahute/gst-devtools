@@ -25,12 +25,13 @@
 #  include "config.h"
 #endif
 
+#include "gst-validate-transcoding.h"
+
 #include <stdlib.h>
 #include <string.h>
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
-#include <gst/validate/validate.h>
 #include <gst/pbutils/encoding-profile.h>
 
 
@@ -758,21 +759,14 @@ _register_actions (void)
 /* *INDENT-ON* */
 }
 
-int
-main (int argc, gchar ** argv)
+GstElement *
+gst_validate_transcoding_build_pipeline (int argc, gchar ** argv,
+    GstValidateRunner ** runner, GstValidateMonitor ** monitor, gchar ** error,
+    GOptionEntry * extra_options)
 {
-  guint i;
-  GstBus *bus;
-  GstValidateRunner *runner;
-  GstValidateMonitor *monitor;
+  gint i;
   GOptionContext *ctx;
-  int rep_err;
-  GstStateChangeReturn sret;
   gchar *output_file = NULL;
-
-#ifdef G_OS_UNIX
-  guint signal_watch_id;
-#endif
 
   GError *err = NULL;
   const gchar *scenario = NULL, *configs = NULL;
@@ -830,7 +824,10 @@ main (int argc, gchar ** argv)
   if (!want_help)
     gst_init (&argc, &argv);
 
+#ifdef HAVE_CONFIG_H
   g_set_prgname ("gst-validate-transcoding-" GST_API_VERSION);
+#endif
+
   ctx = g_option_context_new ("[input-uri] [output-uri]");
   g_option_context_set_summary (ctx, "Transcodes input-uri to output-uri, "
       "using the given encoding profile. The pipeline will be monitored for "
@@ -838,14 +835,16 @@ main (int argc, gchar ** argv)
       "\nCan also perform file conformance"
       "tests after transcoding to make sure the result is correct");
   g_option_context_add_main_entries (ctx, options, NULL);
-  if (want_help) {
+  if (extra_options)
+    g_option_context_add_main_entries (ctx, extra_options, NULL);
+  else
     g_option_context_add_group (ctx, gst_init_get_option_group ());
-  }
 
   if (!g_option_context_parse (ctx, &argc, &argv, &err)) {
-    g_printerr ("Error initializing: %s\n", err->message);
+    *error = g_strdup_printf ("Error initializing: %s", err->message);
     g_option_context_free (ctx);
-    exit (1);
+
+    return NULL;
   }
 
   g_option_context_free (ctx);
@@ -865,9 +864,10 @@ main (int argc, gchar ** argv)
   gst_validate_init ();
 
   if (list_scenarios || output_file) {
-    if (gst_validate_list_scenarios (argv + 1, argc - 1, output_file))
-      return 1;
-    return 0;
+    if (!gst_validate_list_scenarios (argv + 1, argc - 1, output_file))
+      *error = g_strdup ("Could not list scenarios");
+
+    return NULL;
   }
 
 
@@ -875,17 +875,18 @@ main (int argc, gchar ** argv)
 
   if (inspect_action_type) {
     if (gst_validate_print_action_types ((const gchar **) argv + 1, argc - 1))
-      return 0;
+      *error = g_strdup ("Could not print all wanted types");
 
-    return -1;
+    return NULL;
   }
 
   if (argc != 3) {
-    g_printerr ("%i arguments recived, 2 expected.\n"
+    *error = g_strdup_printf ("%i arguments recived, 2 expected.\n"
         "You should run the test using:\n"
         "    ./gst-validate-transcoding-0.10 <input-uri> <output-uri> [options]\n",
         argc - 1);
-    return 1;
+
+    return NULL;
   }
 
   if (encoding_profile == NULL) {
@@ -898,23 +899,55 @@ main (int argc, gchar ** argv)
   /* Create the pipeline */
   create_transcoding_pipeline (argv[1], argv[2]);
 
+  *runner = gst_validate_runner_new ();
+  *monitor =
+      gst_validate_monitor_factory_create (GST_OBJECT_CAST (pipeline), *runner,
+      NULL);
+  gst_validate_reporter_set_handle_g_logs (GST_VALIDATE_REPORTER (*monitor));
+
+  if (!*runner) {
+    *error = g_strdup ("Failed to setup Validate Runner\n");
+
+    return NULL;
+  }
+
+  return pipeline;
+}
+
+#ifndef __ANDROID__
+gint
+main (int argc, gchar ** argv)
+{
+  GstBus *bus;
+  int rep_err;
+  gchar *error;
+  GstStateChangeReturn sret;
+  GstValidateRunner *runner;
+  GstValidateMonitor *monitor;
+
+#ifdef G_OS_UNIX
+  guint signal_watch_id;
+#endif
+
+  pipeline = gst_validate_transcoding_build_pipeline (argc, argv,
+      &runner, &monitor, &error, NULL);
+
+  if (pipeline == NULL) {
+    if (error) {
+      g_printerr ("%s\n", error);
+      g_free (error);
+
+      exit (-1);
+    }
+
+    exit (0);
+  }
 #ifdef G_OS_UNIX
   signal_watch_id =
       g_unix_signal_add (SIGINT, (GSourceFunc) intr_handler, pipeline);
 #endif
 
-  runner = gst_validate_runner_new ();
-  monitor =
-      gst_validate_monitor_factory_create (GST_OBJECT_CAST (pipeline), runner,
-      NULL);
-  gst_validate_reporter_set_handle_g_logs (GST_VALIDATE_REPORTER (monitor));
   mainloop = g_main_loop_new (NULL, FALSE);
-
-  if (!runner) {
-    g_printerr ("Failed to setup Validate Runner\n");
-    exit (1);
-  }
-
   bus = gst_element_get_bus (pipeline);
   gst_bus_add_signal_watch (bus);
   g_signal_connect (bus, "message", (GCallback) bus_callback, mainloop);
@@ -961,3 +994,4 @@ exit:
       ret == 0 ? "PASSED" : "FAILED", ret);
   return ret;
 }
+#endif

@@ -20,7 +20,10 @@
  */
 
 #include "gst-validate-android.h"
+
 #include "../../gst-validate.h"
+#include "../../gst-validate-transcoding.h"
+#include "gst-inspect.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -538,32 +541,11 @@ parse_debug (const gchar * opt, const gchar * arg, gpointer data, GError ** err)
 }
 
 static gboolean
-_set_validate_parametters (GstValidateAndroid * self, gint argc, gchar ** argv)
+_setup_bus (GstValidateAndroid * self)
 {
   GstBus *bus;
-  gchar *error;
   GSource *bus_source;
   gboolean monitor_handles_state;
-  GOptionEntry entries[] = {
-    {"gst-debug", 0, 0, G_OPTION_ARG_CALLBACK, (gpointer) parse_debug,
-          "Comma-separated list of category_name:level pairs to set "
-          "specific levels for the individual categories. Example: "
-          "GST_AUTOPLUG:5,GST_ELEMENT_*:3",
-        "LIST"},
-    {NULL},
-  };
-
-  self->pipeline = gst_validate_build_pipeline (argc, argv, &error,
-      &self->runner, &self->monitor, entries);
-
-  if (self->pipeline == NULL) {
-    if (error) {
-      __fake_exit (self, -1, error);
-
-      g_free (error);
-    }
-    __fake_exit (self, -1, NULL);
-  }
 
   bus = gst_element_get_bus (self->pipeline);
   bus_source = gst_bus_create_watch (bus);
@@ -620,6 +602,65 @@ _set_validate_parametters (GstValidateAndroid * self, gint argc, gchar ** argv)
 }
 
 static gboolean
+_set_validate_parametters (GstValidateAndroid * self, gint argc, gchar ** argv)
+{
+  gchar *error;
+  GOptionEntry entries[] = {
+    {"gst-debug", 0, 0, G_OPTION_ARG_CALLBACK, (gpointer) parse_debug,
+          "Comma-separated list of category_name:level pairs to set "
+          "specific levels for the individual categories. Example: "
+          "GST_AUTOPLUG:5,GST_ELEMENT_*:3",
+        "LIST"},
+    {NULL},
+  };
+
+  self->is_launch = TRUE;
+  self->pipeline = gst_validate_build_pipeline (argc, argv, &error,
+      &self->runner, &self->monitor, entries);
+
+  if (self->pipeline == NULL) {
+    if (error) {
+      __fake_exit (self, -1, error);
+
+      g_free (error);
+    }
+    __fake_exit (self, -1, NULL);
+  }
+
+  return _setup_bus (self);
+}
+
+static gboolean
+_set_validate_transcoding_parametters (GstValidateAndroid * self, gint argc,
+    gchar ** argv)
+{
+  gchar *error;
+  GOptionEntry entries[] = {
+    {"gst-debug", 0, 0, G_OPTION_ARG_CALLBACK, (gpointer) parse_debug,
+          "Comma-separated list of category_name:level pairs to set "
+          "specific levels for the individual categories. Example: "
+          "GST_AUTOPLUG:5,GST_ELEMENT_*:3",
+        "LIST"},
+    {NULL},
+  };
+
+  self->is_transcoder = TRUE;
+  self->pipeline = gst_validate_transcoding_build_pipeline (argc, argv,
+      &self->runner, &self->monitor, &error, entries);
+
+  if (self->pipeline == NULL) {
+    if (error) {
+      __fake_exit (self, -1, error);
+
+      g_free (error);
+    }
+    __fake_exit (self, -1, NULL);
+  }
+
+  return _setup_bus (self);
+}
+
+static gboolean
 _set_parametters (GstValidateAndroid * self)
 {
   gint argc;
@@ -635,6 +676,13 @@ _set_parametters (GstValidateAndroid * self)
 
   if (g_strcmp0 (argv[0], "validate") == 0)
     return _set_validate_parametters (self, argc, argv);
+  if (g_strcmp0 (argv[0], "validate-transcoding") == 0)
+    return _set_validate_transcoding_parametters (self, argc, argv);
+  if (g_strcmp0 (argv[0], "inspect") == 0) {
+    __fake_exit (self, gst_inspect (argc, argv), "");
+
+    return G_SOURCE_REMOVE;
+  }
 
   issue = g_strdup_printf ("Unknown tool: %s", argv[0]);
   __fake_exit (self, -1, issue);
