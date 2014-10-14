@@ -1,0 +1,71 @@
+#!/usr/bin/env python2
+#
+# Copyright (c) 2014,Thibault Saunier <thibault.saunier@collabora.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this program; if not, write to the
+# Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
+# Boston, MA 02110-1301, USA.
+
+import os
+import sys
+import subprocess
+from android import gstvalidateandroid
+from launcher import utils
+import launcher.loggable as loggable
+
+
+def clean_parametters():
+    to_transcode = None
+    transcoded = None
+    transcoded_remote = None
+    for i in range(1, len(sys.argv)):
+        if sys.argv[i].startswith("-"):
+            continue
+
+        if to_transcode is None:
+            if os.path.isfile(utils.url2path(sys.argv[i])):
+                to_transcode = gstvalidateandroid.copy_media_to_remote(utils.url2path(sys.argv[i]))
+                if to_transcode is None:
+                    break
+                sys.argv[i] = utils.path2url(to_transcode)
+            else:
+                to_transcode = sys.argv[i]
+        else:
+            transcoded = utils.url2path(sys.argv[i])
+            encoding_folder = os.path.join(gstvalidateandroid.DEFAULT_REMOTE_TMP_DIR,
+                                           "encoded_files")
+            if not gstvalidateandroid.mkdir(encoding_folder):
+                break
+            transcoded_remote = os.path.join(encoding_folder, "transcoded")
+            sys.argv[i] = utils.path2url(transcoded_remote)
+            gstvalidateandroid.remove(transcoded_remote)
+            break
+
+    return to_transcode, transcoded, transcoded_remote
+
+if __name__ == "__main__":
+    loggable.init("GST_VALIDATE_ANDROID_DEBUG", True, False)
+
+    to_transcode, transcoded, transcoded_remote = clean_parametters ()
+
+    if to_transcode is None or transcoded is None:
+        print("You should launch with gst-validate-transcoding-android <input-uri> <output-uri> [options]")
+        exit(-1)
+
+    print("Args: %s" % sys.argv)
+    if gstvalidateandroid.main("validate-transcoding") == 0:
+        gstvalidateandroid.copy_from_remote(transcoded_remote, transcoded)
+        exit(0)
+
+    exit(1)
