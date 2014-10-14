@@ -329,20 +329,49 @@ priv_gst_debug_logcat (GstDebugCategory * category, GstDebugLevel level,
 static void
 set_message (GstValidateAndroid * self, const gchar * format, ...)
 {
-  gchar *message;
   va_list args;
+  gchar *message;
 
   if (!self->app_context.set_message) {
     return;
   }
 
-  va_start (args, format);
-  message = g_strdup_vprintf (format, args);
-  va_end (args);
+  if (format) {
+    if (self->message)
+      g_string_free (self->message, TRUE);
+
+    if (self->is_transcoder)
+      self->message = g_string_new ("Transcoding pipeline\n");
+    else
+      self->message = g_string_new (NULL);
+
+    va_start (args, format);
+    g_string_append_vprintf (self->message, format, args);
+    va_end (args);
+  }
+
+  if (self->position)
+    message = g_strdup_printf ("%s -- %s", self->message->str, self->position);
+  else
+    message = g_strdup (self->message->str);
 
   self->app_context.set_message (message, self->app_context.app);
 
   g_free (message);
+}
+
+static void
+set_position (GstValidateAndroid * self, const gchar * format, ...)
+{
+  va_list args;
+
+  g_free (self->position);
+
+  va_start (args, format);
+  self->position = g_strdup_vprintf (format, args);
+  va_end (args);
+
+  set_message (self, NULL, NULL);
 }
 
 static void
@@ -533,8 +562,7 @@ state_changed_cb (GstBus * bus, GstMessage * msg, GstValidateAndroid * self)
   gst_message_parse_state_changed (msg, &old_state, &new_state, &pending_state);
   /* Only pay attention to messages coming from the pipeline, not its children */
   if (GST_MESSAGE_SRC (msg) == GST_OBJECT (self->pipeline)) {
-    set_message (self, "State changed to %s",
-        gst_element_state_get_name (new_state));
+    set_message (self, "State: %s", gst_element_state_get_name (new_state));
 
     /* The Ready to Paused state change is particularly interesting: */
     if (old_state == GST_STATE_READY && new_state == GST_STATE_PAUSED) {
@@ -745,9 +773,40 @@ gst_validate_android_set_parametters (GstValidateAndroid * self, gchar * args)
   G_UNLOCK (context_exists);
 }
 
+static gboolean
+update_position_cb (GstValidateAndroid * self)
+{
+  gint64 duration = 0, position = 0;
+
+  if (self->pipeline) {
+    if (!gst_element_query_duration (self->pipeline, GST_FORMAT_TIME,
+            &duration)) {
+      GST_WARNING ("Could not query current duration");
+
+      return TRUE;
+    }
+
+    if (!gst_element_query_position (self->pipeline, GST_FORMAT_TIME,
+            &position)) {
+      GST_WARNING ("Could not query current position");
+
+      return TRUE;
+    }
+
+    position = MAX (position, 0);
+    duration = MAX (duration, 0);
+
+    set_position (self, "position: %" GST_TIME_FORMAT " / %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (position), GST_TIME_ARGS (duration));
+  }
+
+  return TRUE;
+}
+
 static gpointer
 gst_validate_android_main (gpointer user_data)
 {
+  GSource *timeout_source;
   GstValidateAndroid *self = user_data;
 
   GST_DEBUG ("GstValidateAndroid main %p", self);
@@ -768,6 +827,12 @@ gst_validate_android_main (gpointer user_data)
   G_UNLOCK (context_exists);
 
   check_initialization_complete (self);
+
+  timeout_source = g_timeout_source_new (250);
+  g_source_set_callback (timeout_source, (GSourceFunc) update_position_cb, self,
+      NULL);
+  g_source_attach (timeout_source, self->context);
+  g_source_unref (timeout_source);
 
   GST_DEBUG ("Starting main loop %p in %p", self->main_loop, self->context);
   g_main_loop_run (self->main_loop);
@@ -834,6 +899,9 @@ gst_validate_android_free (GstValidateAndroid * self)
   g_main_loop_quit (self->main_loop);
   g_thread_join (self->thread);
   g_free (self->args);
+  g_free (self->position);
+  if (self->message)
+    g_string_free (self->message, TRUE);
   g_slice_free (GstValidateAndroid, self);
 }
 
