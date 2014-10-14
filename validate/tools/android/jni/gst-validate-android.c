@@ -210,12 +210,11 @@ emit:
   }
 
   if (log_domain)
-    tag = g_strdup_printf ("GLib+%s (%s)", log_domain, level);
+    tag = g_strdup_printf ("%s (%s) ", log_domain, level);
   else
-    tag = g_strdup_printf ("GLib (%s)", level);
+    tag = g_strdup_printf ("(%s) ", level);
 
-  gstring = g_string_new (NULL);
-
+  gstring = g_string_new (tag);
   if (!message) {
     g_string_append (gstring, "(NULL) message");
   } else {
@@ -225,6 +224,8 @@ emit:
     g_string_free (msg, TRUE);
   }
   string = g_string_free (gstring, FALSE);
+
+  priv_glib_printerr_handler (string);
 
   g_free (string);
   g_free (tag);
