@@ -28,6 +28,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <android/log.h>
+#include <glib/gprintf.h>       /* g_sprintf */
 
 #include <signal.h>
 #include <glib-unix.h>
@@ -37,6 +38,8 @@ GST_DEBUG_CATEGORY_STATIC (debug_category);
 #define GST_CAT_DEFAULT debug_category
 
 G_LOCK_DEFINE (context_exists);
+
+static gboolean no_color = FALSE;
 
 static void
 fault_spin (void)
@@ -235,15 +238,32 @@ emit:
 }
 
 static GstClockTime start_time;
+static const gchar *levelcolormap[GST_LEVEL_COUNT] = {
+  "\033[37m",                   /* GST_LEVEL_NONE */
+  "\033[31;01m",                /* GST_LEVEL_ERROR */
+  "\033[33;01m",                /* GST_LEVEL_WARNING */
+  "\033[32;01m",                /* GST_LEVEL_INFO */
+  "\033[36m",                   /* GST_LEVEL_DEBUG */
+  "\033[37m",                   /* GST_LEVEL_LOG */
+  "\033[33;01m",                /* GST_LEVEL_FIXME */
+  "\033[37m",                   /* GST_LEVEL_TRACE */
+  "\033[37m",                   /* placeholder for log level 8 */
+  "\033[37m"                    /* GST_LEVEL_MEMDUMP */
+};
 
 void
 priv_gst_debug_logcat (GstDebugCategory * category, GstDebugLevel level,
     const gchar * file, const gchar * function, gint line,
     GObject * object, GstDebugMessage * message, gpointer unused)
 {
+  gint pid;
+  gchar *obj;
   GstClockTime elapsed;
   const gchar *level_str;
   gchar *m;
+  gchar *color = NULL;
+  const gchar *clear;
+  const gchar *levelcolor;
 
   if (level > gst_debug_category_get_threshold (category))
     return;
@@ -268,10 +288,18 @@ priv_gst_debug_logcat (GstDebugCategory * category, GstDebugLevel level,
       break;
   }
 
+  if (no_color) {
+    color = g_strdup ("");
+    clear = "";
+    levelcolor = "";
+  } else {
+    color = gst_debug_construct_term_color (gst_debug_category_get_color
+        (category));
+    clear = "\033[00m";
+    levelcolor = levelcolormap[level];
+  }
 
   if (object) {
-    gchar *obj;
-
     if (GST_IS_PAD (object) && GST_OBJECT_NAME (object)) {
       obj = g_strdup_printf ("<%s:%s>", GST_DEBUG_PAD_NAME (object));
     } else if (GST_IS_OBJECT (object) && GST_OBJECT_NAME (object)) {
@@ -282,19 +310,20 @@ priv_gst_debug_logcat (GstDebugCategory * category, GstDebugLevel level,
       obj = g_strdup_printf ("<%p>", object);
     }
 
-    m = g_strdup_printf ("%" GST_TIME_FORMAT
-        "      %p      %s      %s %s:%d:%s:%s %s", GST_TIME_ARGS (elapsed),
-        g_thread_self (), level_str, gst_debug_category_get_name (category),
-        file, line, function, obj, gst_debug_message_get (message));
-    g_free (obj);
   } else {
-    m = g_strdup_printf ("%" GST_TIME_FORMAT
-        "      %p      %s      %s %s:%d:%s: %s", GST_TIME_ARGS (elapsed),
-        g_thread_self (), level_str, gst_debug_category_get_name (category),
-        file, line, function, gst_debug_message_get (message));
+    obj = g_strdup ("");
   }
+
+  m = g_strdup_printf ("%" GST_TIME_FORMAT
+      "      %p      %s%s%s      %s%s%s %s:%d:%s:%s %s",
+      GST_TIME_ARGS (elapsed), g_thread_self (), levelcolor, level_str, clear,
+      color, gst_debug_category_get_name (category), clear, file, line,
+      function, obj, gst_debug_message_get (message));
+
   __android_log_print (ANDROID_LOG_ERROR, "GStreamer", m);
   g_free (m);
+  g_free (color);
+  g_free (obj);
 }
 
 static void
@@ -611,6 +640,9 @@ _set_validate_parametters (GstValidateAndroid * self, gint argc, gchar ** argv)
           "specific levels for the individual categories. Example: "
           "GST_AUTOPLUG:5,GST_ELEMENT_*:3",
         "LIST"},
+    {"debug-no-color", 0, 0, G_OPTION_ARG_NONE, &no_color,
+          "disable debug coloration ",
+        "LIST"},
     {NULL},
   };
 
@@ -640,6 +672,9 @@ _set_validate_transcoding_parametters (GstValidateAndroid * self, gint argc,
           "Comma-separated list of category_name:level pairs to set "
           "specific levels for the individual categories. Example: "
           "GST_AUTOPLUG:5,GST_ELEMENT_*:3",
+        "LIST"},
+    {"debug-no-color", 0, 0, G_OPTION_ARG_NONE, &no_color,
+          "disable debug coloration ",
         "LIST"},
     {NULL},
   };

@@ -1,4 +1,4 @@
-/* GStreamer
+/* validate-launcher
  *
  * Copyright (C) 2014 Sebastian Dröge <sebastian@centricular.com>
  * Copyright (C) 2014 Thibault Saunier <thibault.saunier@collabora.com>
@@ -114,7 +114,7 @@ public class GstValidateLaunch extends Activity implements SurfaceHolder.Callbac
         copyFileOrDir("scenarios");
 
         try {
-            Log.i ("GStreamer", "Setting args to" + args);
+            Log.i ("validate-launcher", "Setting args to" + args);
             nativeInit(new String(args));
         } catch (Exception e) {
             Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
@@ -143,7 +143,7 @@ public class GstValidateLaunch extends Activity implements SurfaceHolder.Callbac
                 }
             }
         } catch (IOException ex) {
-            Log.e("GStreamer", "I/O Exception", ex);
+            Log.e("validate-launcher", "I/O Exception", ex);
         }
     }
 
@@ -169,7 +169,7 @@ public class GstValidateLaunch extends Activity implements SurfaceHolder.Callbac
             out.close();
             out = null;
         } catch (Exception e) {
-            Log.e("GStreamer", e.getMessage());
+            Log.e("validate-launcher", e.getMessage());
         }
 
     }
@@ -200,22 +200,22 @@ public class GstValidateLaunch extends Activity implements SurfaceHolder.Callbac
 
     public void surfaceChanged(SurfaceHolder holder, int format, int width,
             int height) {
-        Log.d("GStreamer", "Surface changed to format " + format + " width "
+        Log.d("validate-launcher", "Surface changed to format " + format + " width "
                 + width + " height " + height);
         nativeSurfaceInit (holder.getSurface());
     }
 
     public void surfaceCreated(SurfaceHolder holder) {
-        Log.d("GStreamer", "Surface created: " + holder.getSurface());
+        Log.d("validate-launcher", "Surface created: " + holder.getSurface());
     }
 
     public void surfaceDestroyed(SurfaceHolder holder) {
-        Log.d("GStreamer", "Surface destroyed");
+        Log.d("validate-launcher", "Surface destroyed");
         nativeSurfaceFinalize ();
     }
 
     private void onMediaSizeChanged (int width, int height) {
-        Log.i ("GStreamer", "Media size changed to " + width + "x" + height);
+        Log.i ("validate-launcher", "Media size changed to " + width + "x" + height);
         final GStreamerSurfaceView gsv = (GStreamerSurfaceView) this.findViewById(R.id.surface_video);
         gsv.media_width = width;
         gsv.media_height = height;
@@ -227,7 +227,7 @@ public class GstValidateLaunch extends Activity implements SurfaceHolder.Callbac
     }
 
     private void onPipelineDone () {
-        Log.i ("GStreamer", "Pipeline DONE-> quitting");
+        Log.i ("validate-launcher", "Pipeline DONE-> quitting");
 
         finish();
         Process.killProcess( Process.myPid() ); 
