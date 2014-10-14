@@ -26,10 +26,61 @@
 #include <stdlib.h>
 #include <android/log.h>
 
+#include <signal.h>
+#include <glib-unix.h>
+#include <sys/wait.h>
+
 GST_DEBUG_CATEGORY_STATIC (debug_category);
 #define GST_CAT_DEFAULT debug_category
 
 G_LOCK_DEFINE (context_exists);
+
+static void
+fault_spin (void)
+{
+  int spinning = TRUE;
+
+  wait (NULL);
+
+  while (spinning) {
+    g_print ("Spinning. Please run 'ndk-gdb --verbose --force' from"
+        " the gst-devtools/validate/tools/android folder, Ctrl-C to quit.");
+
+    g_usleep (G_USEC_PER_SEC * 10);
+  }
+}
+
+static void
+fault_handler_sighandler (int signum)
+{
+  /* printf is used instead of g_print(), since it's less likely to
+   * deadlock */
+  switch (signum) {
+    case SIGSEGV:
+      g_print ("Caught SIGSEGV\n");
+      break;
+    case SIGQUIT:
+      g_print ("Caught SIGQUIT\n");
+      break;
+    default:
+      g_print ("signo:  %d\n", signum);
+      break;
+  }
+
+  fault_spin ();
+}
+
+static void
+fault_setup (void)
+{
+  struct sigaction action;
+
+  memset (&action, 0, sizeof (action));
+  action.sa_handler = fault_handler_sighandler;
+
+  sigaction (SIGSEGV, &action, NULL);
+  sigaction (SIGQUIT, &action, NULL);
+}
 
 void
 priv_glib_print_handler (const gchar * string)
@@ -623,6 +674,7 @@ gst_validate_android_main (gpointer user_data)
   g_setenv ("GST_VALIDATE_SCENARIOS_PATH",
       "/data/data/org.freedesktop.gstvalidate/scenarios/", TRUE);
 
+  fault_setup ();
   gst_validate_report_add_print_func (priv_validate_print);
   /* Create our own GLib Main Context and make it the default one */
   _ensure_context (self);
