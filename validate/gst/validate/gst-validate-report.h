@@ -81,6 +81,7 @@ typedef enum {
 #define EVENT_SEEK_NOT_HANDLED                   _QUARK("event::seek-not-handled")
 #define EVENT_SEEK_RESULT_POSITION_WRONG         _QUARK("event::seek-result-position-wrong")
 
+
 #define STATE_CHANGE_FAILURE                     _QUARK("state::change-failure")
 
 #define FILE_NO_STREAM_ID                        _QUARK("file-checking::no-stream-id")
