@@ -21,8 +21,8 @@
 
 #include "gst-validate-android.h"
 
-#include "../../gst-validate.h"
-#include "../../gst-validate-transcoding.h"
+#include "../../helpers/gst-validate.h"
+#include "../../helpers/gst-validate-transcoding.h"
 #include "gst-inspect.h"
 
 #include <string.h>

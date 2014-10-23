@@ -4,7 +4,7 @@ include $(CLEAR_VARS)
 
 LOCAL_CFLAGS 		:= -w
 LOCAL_MODULE    := android_launch
-LOCAL_SRC_FILES := android-launch.c gst-validate-android.c ../../gst-validate.c ../../gst-validate-transcoding.c gst-inspect.c
+LOCAL_SRC_FILES := android-launch.c gst-validate-android.c ../../helpers/gst-validate.c ../../helpers/gst-validate-transcoding.c gst-inspect.c
 LOCAL_SHARED_LIBRARIES := gstreamer_android
 LOCAL_LDLIBS := -llog -landroid
 include $(BUILD_SHARED_LIBRARY)
