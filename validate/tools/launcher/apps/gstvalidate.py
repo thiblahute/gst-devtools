@@ -105,7 +105,7 @@ class GstValidateTranscodingTestsGenerator(GstValidateTestsGenerator):
 
 class GstValidatePipelineTestsGenerator(GstValidateTestsGenerator):
     def __init__(self, name, test_manager, pipeline_template=None, pipelines_descriptions=None,
-                 valid_scenarios=[]):
+                 valid_scenarios=[], disable_media_info_checks=False):
         """
         @name: The name of the generator
         @pipeline_template: A template pipeline to be used to generate actual pipelines
@@ -117,6 +117,7 @@ class GstValidatePipelineTestsGenerator(GstValidateTestsGenerator):
         self._pipeline_template = pipeline_template
         self._pipelines_descriptions = pipelines_descriptions
         self._valid_scenarios = valid_scenarios
+        self.disable_media_info_checks = disable_media_info_checks
 
     def get_fname(self, scenario, protocol=None, name=None):
         if name is None:
@@ -155,8 +156,9 @@ class GstValidatePipelineTestsGenerator(GstValidateTestsGenerator):
 
 class GstValidatePlaybinTestsGenerator(GstValidatePipelineTestsGenerator):
 
-    def __init__(self, test_manager):
-        GstValidatePipelineTestsGenerator.__init__(self, "playback", test_manager, "playbin")
+    def __init__(self, test_manager, disable_media_info_checks=False):
+        GstValidatePipelineTestsGenerator.__init__(self, "playback", test_manager, "playbin",
+                                                   disable_media_info_checks=disable_media_info_checks)
 
     def populate_tests(self, uri_minfo_special_scenarios, scenarios):
         for uri, minfo, special_scenarios in uri_minfo_special_scenarios:
@@ -186,13 +188,18 @@ class GstValidatePlaybinTestsGenerator(GstValidatePipelineTestsGenerator):
                     # 10MB so we can reverse playback
                     cpipe += " ring-buffer-max-size=10485760"
 
+                if self.disable_media_info_checks is True:
+                    media_descriptor = None
+                else:
+                    media_descriptor = minfo.media_descriptor
+
                 self.add_test(GstValidateLaunchTest(self.test_manager.GST_VALIDATE_COMMAND,
                                                     fname,
                                                     self.test_manager.options,
                                                     self.test_manager.reporter,
                                                     cpipe,
                                                     scenario=scenario,
-                                                    media_descriptor=minfo.media_descriptor)
+                                                    media_descriptor=media_descriptor)
                               )
 
 
