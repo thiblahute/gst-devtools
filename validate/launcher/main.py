@@ -133,45 +133,6 @@ MEDIAS_FOLDER = "medias"
 DEFAULT_GST_QA_ASSETS_REPO = "git://people.freedesktop.org/~tsaunier/gst-qa-assets/"
 
 
-def update_assets(options):
-    try:
-        launch_command("cd %s && %s" % (options.clone_dir,
-                                        options.update_assets_command),
-                       fails=True)
-    except subprocess.CalledProcessError as e:
-        if "annex" in options.update_assets_command:
-            m = "\n\nMAKE SURE YOU HAVE git-annex INSTALLED!"
-        else:
-            m = ""
-
-        printc("Could not update assets repository\n\nError: %s%s" % (e, m),
-               Colors.FAIL, True)
-
-        return False
-
-    return True
-
-
-def download_assets(options):
-    try:
-        launch_command("%s %s %s" % (options.get_assets_command,
-                                     options.remote_assets_url,
-                                     options.clone_dir),
-                       fails=True)
-    except subprocess.CalledProcessError as e:
-        if "git" in options.get_assets_command:
-            m = "\n\nMAKE SURE YOU HAVE git INSTALLED!"
-        else:
-            m = ""
-
-        printc("Could not download assets\n\nError: %s%s" % (e, m),
-               Colors.FAIL, True)
-
-        return False
-
-    return True
-
-
 class PrintUsage(argparse.Action):
 
     def __init__(self, option_strings, dest=argparse.SUPPRESS, default=argparse.SUPPRESS, help=None):
@@ -376,15 +337,8 @@ user argument, you can thus overrides command line options using that.
     tests_launcher.set_settings(options, args)
 
     if options.remote_assets_url and options.sync:
-        if os.path.exists(options.clone_dir):
-            if not update_assets(options):
-                exit(1)
-        else:
-            if not download_assets(options):
-                exit(1)
-
-            if not update_assets(options):
-                exit(1)
+        if not tests_launcher.sync_assets():
+            exit(1)
 
     # Ensure that the scenario manager singleton is ready to be used
     ScenarioManager().config = options
