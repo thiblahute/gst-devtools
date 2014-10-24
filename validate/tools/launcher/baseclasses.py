@@ -700,6 +700,9 @@ class TestsManager(Loggable):
 
         return False
 
+    def sync_assets(self):
+        return True
+
     def _is_test_wanted(self, test):
         if self._check_blacklisted(test):
             return False
@@ -806,6 +809,14 @@ class _TestsLauncher(Loggable):
     def add_options(self, parser):
         for tester in self.testers:
             tester.add_options(parser)
+
+
+    def sync_assets(self):
+        for tester in self.testers:
+            if not tester.sync_assets():
+                return False
+        return True
+
 
     def set_settings(self, options, args):
         self.reporter = reporters.XunitReporter(options)
@@ -1058,10 +1069,61 @@ class GstValidateBaseTestManager(TestsManager):
         else:
             self._scenarios.append(scenarios)
 
+    def update_assets(self):
+        try:
+            utils.launch_command("cd %s && %s" % (self.options.clone_dir,
+                                            self.options.update_assets_command),
+                           fails=True)
+        except subprocess.CalledProcessError as e:
+            if "annex" in self.options.update_assets_command:
+                m = "\n\nMAKE SURE YOU HAVE git-annex INSTALLED!"
+            else:
+                m = ""
+
+            printc("Could not update assets repository\n\nError: %s%s" %(e, m),
+                   Colors.FAIL, True)
+
+            return False
+
+        return True
+
+
+    def download_assets(self):
+        try:
+            utils.launch_command("%s %s %s" % (self.options.get_assets_command,
+                                         self.options.remote_assets_url,
+                                         self.options.clone_dir),
+                           fails=True)
+        except subprocess.CalledProcessError as e:
+            if "git" in self.options.get_assets_command:
+                m = "\n\nMAKE SURE YOU HAVE git INSTALLED!"
+            else:
+                m = ""
+
+            printc("Could not download assets\n\nError: %s%s" %(e, m),
+                   Colors.FAIL, True)
+
+            return False
+
+        return True
+
     def set_settings(self, options, args, reporter):
         self.scenarios_manager.set_config(options)
 
         super(GstValidateBaseTestManager, self).set_settings(options, args, reporter)
+
+    def sync_assets(self):
+        if os.path.exists(self.options.clone_dir):
+            if not self.update_assets():
+                return False
+        else:
+            if not self.download_assets():
+                return False
+
+            if not self.update_assets():
+                return False
+
+        return True
 
     def get_scenarios(self):
         return self._scenarios
