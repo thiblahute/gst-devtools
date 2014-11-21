@@ -175,6 +175,20 @@ typedef enum
     GST_VALIDATE_ACTION_TYPE_ASYNC = 1 << 2,
 } GstValidateActionTypeFlags;
 
+/**
+ * @GST_VALIDATE_SCENARIO_NOT_ENDED: GstValidateIssueType to report when the
+ *                                   scenario did not end properly
+ * @GST_VALIDATE_SCENARIO_ACTION_EXECUTION_ERROR: GstValidateIssueType to
+ *                                                report when an error happens
+ *                                                during the execution of an action
+ * @GST_VALIDATE_SCENARIO_ACTION_EXECUTION_ISSUE: GstValidateIssueType to
+ *                                                report when an issue happens
+ *                                                during the execution of an action
+ */
+#define GST_VALIDATE_SCENARIO_NOT_ENDED               g_quark_from_string("scenario::not-ended")
+#define GST_VALIDATE_SCENARIO_ACTION_EXECUTION_ERROR  g_quark_from_string("scenario::execution-error")
+#define GST_VALIDATE_SCENARIO_ACTION_EXECUTION_ISSUE  g_quark_from_string("scenario::execution-issue")
+
 GType gst_validate_scenario_get_type (void);
 
 GstValidateScenario * gst_validate_scenario_factory_create (GstValidateRunner *runner,

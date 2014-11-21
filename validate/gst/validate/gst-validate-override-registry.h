@@ -47,7 +47,8 @@ I void gst_validate_override_register_by_name (const gchar * name, GstValidateOv
 I void gst_validate_override_register_by_type (GType gtype, GstValidateOverride * override);
 I void gst_validate_override_register_by_klass (const gchar * klass, GstValidateOverride * override);
 I void gst_validate_override_registry_attach_overrides (GstValidateMonitor * monitor);
-I int gst_validate_override_registry_preload (void);
+/* Expose for the testsuite */
+int gst_validate_override_registry_preload (void);
 
 G_END_DECLS
 
