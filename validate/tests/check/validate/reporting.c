@@ -18,8 +18,11 @@
  */
 
 #include <gst/validate/validate.h>
-#include <gst/check/gstcheck.h>
+
 #include "test-utils.h"
+#include "../../../gst/validate/gst-validate-internal.h"
+
+#include <gst/check/gstcheck.h>
 
 GST_START_TEST (test_report_levels)
 {
@@ -151,11 +154,14 @@ _create_issues (GstValidateRunner * runner)
 
   /* There's gonna be some clunkiness in here because of funnel */
   probe_id1 = gst_pad_add_probe (srcpad1,
-      GST_PAD_PROBE_TYPE_BUFFER | GST_PAD_PROBE_TYPE_BUFFER_LIST | GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM,
-      (GstPadProbeCallback) drop_buffers, NULL, NULL);
-  probe_id2 = gst_pad_add_probe (srcpad2,
-      GST_PAD_PROBE_TYPE_BUFFER | GST_PAD_PROBE_TYPE_BUFFER_LIST | GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM,
-      (GstPadProbeCallback) drop_buffers, NULL, NULL);
+      GST_PAD_PROBE_TYPE_BUFFER | GST_PAD_PROBE_TYPE_BUFFER_LIST |
+      GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, (GstPadProbeCallback) drop_buffers,
+      NULL, NULL);
+  probe_id2 =
+      gst_pad_add_probe (srcpad2,
+      GST_PAD_PROBE_TYPE_BUFFER | GST_PAD_PROBE_TYPE_BUFFER_LIST |
+      GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, (GstPadProbeCallback) drop_buffers,
+      NULL, NULL);
 
   /* We want to handle the src behaviour ourselves */
   fail_unless (gst_pad_activate_mode (srcpad1, GST_PAD_MODE_PUSH, TRUE));
@@ -247,8 +253,8 @@ GST_START_TEST (test_specific_levels)
 {
   GstValidateRunner *runner;
 
-  fail_unless (g_setenv ("GST_VALIDATE_REPORTING_DETAILS", "none,fakesrc1:synthetic",
-          TRUE));
+  fail_unless (g_setenv ("GST_VALIDATE_REPORTING_DETAILS",
+          "none,fakesrc1:synthetic", TRUE));
   runner = gst_validate_runner_new ();
   _create_issues (runner);
   /* One issue should go through the none filter */
@@ -264,8 +270,8 @@ GST_START_TEST (test_specific_levels)
   fail_unless_equals_int (gst_validate_runner_get_reports_count (runner), 5);
   g_object_unref (runner);
 
-  fail_unless (g_setenv ("GST_VALIDATE_REPORTING_DETAILS", "subchain,sink:monitor",
-          TRUE));
+  fail_unless (g_setenv ("GST_VALIDATE_REPORTING_DETAILS",
+          "subchain,sink:monitor", TRUE));
   runner = gst_validate_runner_new ();
   _create_issues (runner);
   /* 3 issues because both fake sources will have subsequent subchains of

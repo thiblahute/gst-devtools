@@ -22,6 +22,8 @@
 #include <gst/validate/validate.h>
 #include <gst/validate/gst-validate-override-registry.h>
 
+#include "../../../gst/validate/gst-validate-internal.h"
+
 static const gchar *some_overrides =
     "change-severity, issue-id=buffer::not-expected-one, new-severity=critical\n"
     "change-severity, issue-id=buffer::not-expected-one, new-severity=warning, element-factory-name=queue";

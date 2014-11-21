@@ -16,33 +16,34 @@ libgstvalidate_@GST_API_VERSION@_la_SOURCES = \
 	media-descriptor-writer.c \
 	media-descriptor-parser.c \
 	gst-validate-media-info.c \
-    validate.c
+  validate.c
 
 libgstvalidate_@GST_API_VERSION@include_HEADERS = \
 	validate.h \
-	gst-validate-bin-monitor.h \
-	gst-validate-pipeline-monitor.h \
-	gst-validate-element-monitor.h \
+	gst-validate-types.h \
 	gst-validate-enums.h \
-	media-descriptor.h \
-	media-descriptor-writer.h \
-	media-descriptor-parser.h \
 	gst-validate-monitor-factory.h \
-	gst-validate-monitor.h \
-	gst-validate-override.h \
-	gst-validate-override-registry.h \
-	gst-validate-pad-monitor.h \
 	gst-validate-reporter.h \
 	gst-validate-report.h \
 	gst-validate-runner.h \
 	gst-validate-scenario.h \
-	gst-validate-utils.h \
-	gst-validate-media-info.h
+	gst-validate-utils.h
 
 noinst_HEADERS = 		\
 	gettext.h \
+	media-descriptor.h \
+	media-descriptor-writer.h \
+	media-descriptor-parser.h \
+	gst-validate-monitor.h \
+	gst-validate-pipeline-monitor.h \
 	gst-validate-i18n-lib.h \
-	gst-validate-internal.h
+	gst-validate-bin-monitor.h \
+	gst-validate-element-monitor.h \
+	gst-validate-pad-monitor.h \
+	gst-validate-internal.h \
+	gst-validate-override.h \
+	gst-validate-media-info.h \
+	gst-validate-override-registry.h
 
 
 lib_LTLIBRARIES = libgstvalidate-@GST_API_VERSION@.la

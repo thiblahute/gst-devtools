@@ -33,6 +33,7 @@
 #include "gst-validate-monitor-factory.h"
 #include "gst-validate-override-registry.h"
 #include "gst-validate-runner.h"
+#include "gst-validate-report.h"
 
 /**
  * SECTION:gst-validate-runner
@@ -166,7 +167,7 @@ _set_reporting_level_for_name (GstValidateRunner * runner,
 }
 
 static void
-_replace_double_colons (gchar *word)
+_replace_double_colons (gchar * word)
 {
   while (word) {
     word = strstr (word, "::");

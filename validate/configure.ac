@@ -278,7 +278,6 @@ data/Makefile
 gst/Makefile
 gst/validate/Makefile
 gst/preload/Makefile
-gst/overrides/Makefile
 tests/Makefile
 tests/check/Makefile
 pkgconfig/Makefile

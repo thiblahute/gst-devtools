@@ -20,6 +20,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#include "gst-validate-internal.h"
 #include "media-descriptor.h"
 
 G_DEFINE_ABSTRACT_TYPE_WITH_CODE (GstMediaDescriptor, gst_media_descriptor,

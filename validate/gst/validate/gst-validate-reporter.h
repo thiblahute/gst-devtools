@@ -64,6 +64,7 @@ G_BEGIN_DECLS
   } G_STMT_END
 #endif /* G_HAVE_ISO_VARARGS */
 #endif /* G_HAVE_GNUC_VARARGS */
+
 GType gst_validate_reporter_get_type (void);
 
 /**
@@ -88,29 +89,16 @@ struct _GstValidateReporterInterface
 {
   GTypeInterface parent;
 
-    GstValidateInterceptionReturn (*intercept_report) (GstValidateReporter *
-      reporter, GstValidateReport * report);
-    GstValidateReportingDetails (*get_reporting_level) (GstValidateReporter *
-      reporter);
+  GstValidateInterceptionReturn (*intercept_report) (GstValidateReporter  * reporter,
+                                                     GstValidateReport    * report);
+  GstValidateReportingDetails (*get_reporting_level) (GstValidateReporter * reporter);
 };
 
-void gst_validate_reporter_set_name            (GstValidateReporter * reporter,
-                                          gchar * name);
-const gchar * gst_validate_reporter_get_name            (GstValidateReporter * reporter);
-GstValidateRunner * gst_validate_reporter_get_runner (GstValidateReporter *reporter);
-void gst_validate_reporter_init                (GstValidateReporter * reporter, const gchar *name);
-void gst_validate_report                       (GstValidateReporter * reporter, GstValidateIssueId issue_id,
-                                          const gchar * format, ...);
-void gst_validate_report_valist                (GstValidateReporter * reporter, GstValidateIssueId issue_id,
-                                          const gchar * format, va_list var_args);
-
-void gst_validate_reporter_set_runner          (GstValidateReporter * reporter, GstValidateRunner *runner);
 void gst_validate_reporter_set_handle_g_logs   (GstValidateReporter * reporter);
-GstValidateReport * gst_validate_reporter_get_report (GstValidateReporter *reporter,
-                                                      GstValidateIssueId issue_id);
-GList * gst_validate_reporter_get_reports (GstValidateReporter * reporter);
-gint gst_validate_reporter_get_reports_count (GstValidateReporter *reporter);
-GstValidateReportingDetails gst_validate_reporter_get_reporting_level (GstValidateReporter *reporter);
+void gst_validate_report                       (GstValidateReporter * reporter,
+                                                GstValidateIssueId issue_id,
+                                                const gchar * format, ...);
+gint gst_validate_reporter_get_reports_count   (GstValidateReporter *reporter);
 
 G_END_DECLS
 #endif /* _GST_VALIDATE_REPORTER_ */

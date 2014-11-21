@@ -25,6 +25,7 @@
 #endif
 
 #include "gst-validate-internal.h"
+#include "gst-validate-bin-monitor.h"
 #include "gst-validate-pipeline-monitor.h"
 #include "gst-validate-monitor-factory.h"
 
@@ -37,14 +38,80 @@
  * TODO
  */
 
+/* GstValidatePipelineMonitor:
+ *
+ * GStreamer Validate PipelineMonitor class.
+ *
+ * Class that wraps a #GstPipeline for Validate checks
+ */
+struct _GstValidatePipelineMonitor
+{
+  GstValidateBinMonitor parent;
+
+  /*< private > */
+  gulong element_added_id;
+  guint print_pos_srcid;
+  gboolean buffering;
+};
+
+/**
+ * GstValidatePipelineMonitorClass:
+ * @parent_class: parent
+ *
+ * GStreamer Validate PipelineMonitor object class.
+ */
+struct _GstValidatePipelineMonitorClass
+{
+  GstValidateBinMonitorClass parent_class;
+};
+
 enum
 {
+  PROP_FIRST,
+  PROP_HANDLES_STATE,
   PROP_LAST
 };
 
 #define gst_validate_pipeline_monitor_parent_class parent_class
 G_DEFINE_TYPE (GstValidatePipelineMonitor, gst_validate_pipeline_monitor,
     GST_TYPE_VALIDATE_BIN_MONITOR);
+
+static void
+_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  switch (prop_id) {
+    case PROP_HANDLES_STATE:
+      g_assert_not_reached ();
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec)
+{
+  GstValidateBinMonitor *monitor;
+
+  monitor = GST_VALIDATE_BIN_MONITOR_CAST (object);
+
+  switch (prop_id) {
+    case PROP_HANDLES_STATE:
+      if (monitor->scenario == NULL)
+        g_value_set_boolean (value, FALSE);
+      else
+        g_object_get_property (G_OBJECT (monitor->scenario), "handles-states",
+            value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
 
 static void
 gst_validate_pipeline_monitor_dispose (GObject * object)
@@ -69,7 +136,15 @@ gst_validate_pipeline_monitor_class_init (GstValidatePipelineMonitorClass *
 
   gobject_class = G_OBJECT_CLASS (klass);
 
+  gobject_class->get_property = _get_property;
+  gobject_class->set_property = _set_property;
   gobject_class->dispose = gst_validate_pipeline_monitor_dispose;
+
+  g_object_class_install_property (gobject_class, PROP_HANDLES_STATE,
+      g_param_spec_boolean ("handles-states", "Handles state",
+          "True if the application should not set handle the first state change "
+          " False if it is application responsibility",
+          FALSE, G_PARAM_READABLE));
 }
 
 static void

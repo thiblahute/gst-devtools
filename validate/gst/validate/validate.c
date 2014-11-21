@@ -31,6 +31,7 @@
 
 #include "validate.h"
 #include "gst-validate-internal.h"
+#include "gst-validate-override-registry.h"
 
 GST_DEBUG_CATEGORY (gstvalidate_debug);
 

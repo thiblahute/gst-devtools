@@ -5,12 +5,14 @@
 #ifndef _GST_VALIDATE_H
 #define _GST_VALIDATE_H
 
-#include <gst/validate/gst-validate-runner.h>
+#include <gst/validate/gst-validate-types.h>
+#include <gst/validate/gst-validate-enums.h>
 #include <gst/validate/gst-validate-monitor-factory.h>
-#include <gst/validate/gst-validate-override-registry.h>
-#include <gst/validate/gst-validate-report.h>
 #include <gst/validate/gst-validate-reporter.h>
-#include <gst/validate/gst-validate-media-info.h>
+#include <gst/validate/gst-validate-report.h>
+#include <gst/validate/gst-validate-runner.h>
+#include <gst/validate/gst-validate-scenario.h>
+#include <gst/validate/gst-validate-utils.h>
 
 void gst_validate_init (void);
 

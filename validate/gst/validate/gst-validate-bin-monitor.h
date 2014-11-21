@@ -24,9 +24,10 @@
 
 #include <glib-object.h>
 #include <gst/gst.h>
-#include <gst/validate/gst-validate-element-monitor.h>
-#include <gst/validate/gst-validate-runner.h>
-#include <gst/validate/gst-validate-scenario.h>
+
+#include "gst-validate-element-monitor.h"
+#include "gst-validate-runner.h"
+#include "gst-validate-scenario.h"
 
 G_BEGIN_DECLS
 
@@ -40,38 +41,6 @@ G_BEGIN_DECLS
 #define GST_VALIDATE_BIN_MONITOR_CLASS_CAST(klass)    ((GstValidateBinMonitorClass*)(klass))
 
 #define GST_VALIDATE_BIN_MONITOR_GET_BIN(m) (GST_BIN_CAST (GST_VALIDATE_ELEMENT_MONITOR_GET_ELEMENT (m)))
-
-typedef struct _GstValidateBinMonitor GstValidateBinMonitor;
-typedef struct _GstValidateBinMonitorClass GstValidateBinMonitorClass;
-
-/**
- * GstValidateBinMonitor:
- *
- * GStreamer Validate BinMonitor class.
- *
- * Class that wraps a #GstBin for Validate checks
- */
-struct _GstValidateBinMonitor {
-  GstValidateElementMonitor parent;
-
-  GList *element_monitors;
-
-  GstValidateScenario *scenario;
-
-  /*< private >*/
-  gulong element_added_id;
-  gboolean stateless;
-};
-
-/**
- * GstValidateBinMonitorClass:
- * @parent_class: parent
- *
- * GStreamer Validate BinMonitor object class.
- */
-struct _GstValidateBinMonitorClass {
-  GstValidateElementMonitorClass parent_class;
-};
 
 /* normal GObject stuff */
 GType		gst_validate_bin_monitor_get_type		(void);

@@ -24,23 +24,18 @@
 
 #include <glib-object.h>
 #include <gst/gst.h>
-
-typedef struct _GstValidateRunner GstValidateRunner;
-typedef struct _GstValidateRunnerClass GstValidateRunnerClass;
-
-#include <gst/validate/gst-validate-report.h>
-#include <gst/validate/gst-validate-enums.h>
+#include "gst-validate-types.h"
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_VALIDATE_RUNNER			(gst_validate_runner_get_type ())
+#define GST_TYPE_VALIDATE_RUNNER			        (gst_validate_runner_get_type ())
 #define GST_IS_VALIDATE_RUNNER(obj)		        (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_VALIDATE_RUNNER))
-#define GST_IS_VALIDATE_RUNNER_CLASS(klass)	        (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_VALIDATE_RUNNER))
-#define GST_VALIDATE_RUNNER_GET_CLASS(obj)	        (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_VALIDATE_RUNNER, GstValidateRunnerClass))
-#define GST_VALIDATE_RUNNER(obj)			(G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_VALIDATE_RUNNER, GstValidateRunner))
-#define GST_VALIDATE_RUNNER_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_VALIDATE_RUNNER, GstValidateRunnerClass))
-#define GST_VALIDATE_RUNNER_CAST(obj)                 ((GstValidateRunner*)(obj))
-#define GST_VALIDATE_RUNNER_CLASS_CAST(klass)         ((GstValidateRunnerClass*)(klass))
+#define GST_IS_VALIDATE_RUNNER_CLASS(klass)	  (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_VALIDATE_RUNNER))
+#define GST_VALIDATE_RUNNER_GET_CLASS(obj)	  (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_VALIDATE_RUNNER, GstValidateRunnerClass))
+#define GST_VALIDATE_RUNNER(obj)			        (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_VALIDATE_RUNNER, GstValidateRunner))
+#define GST_VALIDATE_RUNNER_CLASS(klass)		  (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_VALIDATE_RUNNER, GstValidateRunnerClass))
+#define GST_VALIDATE_RUNNER_CAST(obj)         ((GstValidateRunner*)(obj))
+#define GST_VALIDATE_RUNNER_CLASS_CAST(klass) ((GstValidateRunnerClass*)(klass))
 
 typedef struct _GstValidateRunnerPrivate GstValidateRunnerPrivate;
 
@@ -69,20 +64,12 @@ struct _GstValidateRunnerClass {
 };
 
 /* normal GObject stuff */
-GType		gst_validate_runner_get_type		(void);
+GType		            gst_validate_runner_get_type		      (void);
 
-GstValidateRunner *   gst_validate_runner_new               (void);
-
-void            gst_validate_runner_add_report  (GstValidateRunner * runner, GstValidateReport * report);
-
-guint           gst_validate_runner_get_reports_count (GstValidateRunner * runner);
-GList *        gst_validate_runner_get_reports (GstValidateRunner * runner);
-
-int             gst_validate_runner_printf (GstValidateRunner * runner);
-
-GstValidateReportingDetails gst_validate_runner_get_default_reporting_level (GstValidateRunner *runner);
-GstValidateReportingDetails gst_validate_runner_get_reporting_level_for_name (GstValidateRunner *runner,
-                                                                            const gchar *name);
+/* API */
+GstValidateRunner * gst_validate_runner_new               (void);
+guint               gst_validate_runner_get_reports_count (GstValidateRunner * runner);
+int                 gst_validate_runner_printf            (GstValidateRunner * runner);
 
 G_END_DECLS
 

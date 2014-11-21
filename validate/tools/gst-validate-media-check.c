@@ -30,10 +30,11 @@
 
 #include <gst/gst.h>
 #include <gst/validate/validate.h>
-#include <gst/validate/media-descriptor-writer.h>
-#include <gst/validate/media-descriptor-parser.h>
-#include <gst/validate/media-descriptor.h>
 #include <gst/pbutils/encoding-profile.h>
+
+#include "../gst/validate/media-descriptor-writer.h"
+#include "../gst/validate/media-descriptor-parser.h"
+#include "../gst/validate/media-descriptor.h"
 
 int
 main (int argc, gchar ** argv)

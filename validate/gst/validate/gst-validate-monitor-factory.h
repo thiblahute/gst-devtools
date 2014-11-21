@@ -30,7 +30,9 @@
 
 G_BEGIN_DECLS
 
-GstValidateMonitor *       gst_validate_monitor_factory_create (GstObject * target, GstValidateRunner * runner, GstValidateMonitor * parent);
+GstValidateMonitor * gst_validate_monitor_factory_create (GstObject * target,
+                                                          GstValidateRunner * runner,
+                                                          GstValidateMonitor * parent);
 
 G_END_DECLS
 

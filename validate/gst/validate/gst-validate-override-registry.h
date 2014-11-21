@@ -29,6 +29,8 @@
 #include <gst/validate/gst-validate-monitor.h>
 #include <gst/validate/gst-validate-override.h>
 
+#define I G_GNUC_INTERNAL
+
 G_BEGIN_DECLS
 
 typedef struct {
@@ -39,18 +41,13 @@ typedef struct {
   GQueue klass_overrides;
 } GstValidateOverrideRegistry;
 
-GstValidateOverrideRegistry * gst_validate_override_registry_get (void);
-
-GList *
-gst_validate_override_registry_get_override_for_names (GstValidateOverrideRegistry *reg,
-        const gchar *name, ...);
-void gst_validate_override_register_by_name (const gchar * name, GstValidateOverride * override);
-void gst_validate_override_register_by_type (GType gtype, GstValidateOverride * override);
-void gst_validate_override_register_by_klass (const gchar * klass, GstValidateOverride * override);
-
-void gst_validate_override_registry_attach_overrides (GstValidateMonitor * monitor);
-
-int gst_validate_override_registry_preload (void);
+I GstValidateOverrideRegistry * gst_validate_override_registry_get (void);
+I GList * gst_validate_override_registry_get_override_for_names (GstValidateOverrideRegistry *reg, const gchar *name, ...);
+I void gst_validate_override_register_by_name (const gchar * name, GstValidateOverride * override);
+I void gst_validate_override_register_by_type (GType gtype, GstValidateOverride * override);
+I void gst_validate_override_register_by_klass (const gchar * klass, GstValidateOverride * override);
+I void gst_validate_override_registry_attach_overrides (GstValidateMonitor * monitor);
+I int gst_validate_override_registry_preload (void);
 
 G_END_DECLS
 

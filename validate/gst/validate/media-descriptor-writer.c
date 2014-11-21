@@ -22,6 +22,7 @@
 
 #include <gst/validate/validate.h>
 #include "media-descriptor-writer.h"
+#include "gst-validate-internal.h"
 #include <string.h>
 
 G_DEFINE_TYPE (GstMediaDescriptorWriter,

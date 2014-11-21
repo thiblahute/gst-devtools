@@ -1,4 +1,4 @@
-SUBDIRS = validate overrides
+SUBDIRS = validate
 
 if HAVE_LD_PRELOAD
 SUBDIRS += preload

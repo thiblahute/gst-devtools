@@ -24,56 +24,28 @@
 
 #include <glib-object.h>
 #include <gst/gst.h>
-#include <gst/validate/gst-validate-bin-monitor.h>
-#include <gst/validate/gst-validate-runner.h>
+
+#include "gst-validate-types.h"
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_VALIDATE_PIPELINE_MONITOR			(gst_validate_pipeline_monitor_get_type ())
+#define GST_TYPE_VALIDATE_PIPELINE_MONITOR			           (gst_validate_pipeline_monitor_get_type ())
 #define GST_IS_VALIDATE_PIPELINE_MONITOR(obj)              (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_VALIDATE_PIPELINE_MONITOR))
 #define GST_IS_VALIDATE_PIPELINE_MONITOR_CLASS(klass)      (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_VALIDATE_PIPELINE_MONITOR))
 #define GST_VALIDATE_PIPELINE_MONITOR_GET_CLASS(obj)       (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_VALIDATE_PIPELINE_MONITOR, GstValidatePipelineMonitorClass))
-#define GST_VALIDATE_PIPELINE_MONITOR(obj)			(G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_VALIDATE_PIPELINE_MONITOR, GstValidatePipelineMonitor))
-#define GST_VALIDATE_PIPELINE_MONITOR_CLASS(klass)		(G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_VALIDATE_PIPELINE_MONITOR, GstValidatePipelineMonitorClass))
+#define GST_VALIDATE_PIPELINE_MONITOR(obj)			           (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_VALIDATE_PIPELINE_MONITOR, GstValidatePipelineMonitor))
+#define GST_VALIDATE_PIPELINE_MONITOR_CLASS(klass)		     (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_VALIDATE_PIPELINE_MONITOR, GstValidatePipelineMonitorClass))
 #define GST_VALIDATE_PIPELINE_MONITOR_CAST(obj)            ((GstValidatePipelineMonitor*)(obj))
 #define GST_VALIDATE_PIPELINE_MONITOR_CLASS_CAST(klass)    ((GstValidatePipelineMonitorClass*)(klass))
 
 #define GST_VALIDATE_PIPELINE_MONITOR_GET_PIPELINE(m) (GST_PIPELINE_CAST (GST_VALIDATE_ELEMENT_MONITOR_GET_ELEMENT (m)))
 
-typedef struct _GstValidatePipelineMonitor GstValidatePipelineMonitor;
-typedef struct _GstValidatePipelineMonitorClass GstValidatePipelineMonitorClass;
-
-/**
- * GstValidatePipelineMonitor:
- *
- * GStreamer Validate PipelineMonitor class.
- *
- * Class that wraps a #GstPipeline for Validate checks
- */
-struct _GstValidatePipelineMonitor {
-  GstValidateBinMonitor parent;
-
-  /*< private >*/
-  gulong element_added_id;
-  guint print_pos_srcid;
-  gboolean buffering;
-};
-
-/**
- * GstValidatePipelineMonitorClass:
- * @parent_class: parent
- *
- * GStreamer Validate PipelineMonitor object class.
- */
-struct _GstValidatePipelineMonitorClass {
-  GstValidateBinMonitorClass parent_class;
-};
-
 /* normal GObject stuff */
 GType		gst_validate_pipeline_monitor_get_type		(void);
 
 GstValidatePipelineMonitor *   gst_validate_pipeline_monitor_new      (GstPipeline * pipeline,
-    GstValidateRunner * runner, GstValidateMonitor * parent);
+                                                                       GstValidateRunner * runner,
+                                                                       GstValidateMonitor * parent);
 
 G_END_DECLS
 

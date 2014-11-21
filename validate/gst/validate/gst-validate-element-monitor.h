@@ -25,7 +25,7 @@
 #include <glib-object.h>
 #include <gst/gst.h>
 
-#include <gst/validate/gst-validate-monitor.h>
+#include "gst-validate-types.h"
 
 G_BEGIN_DECLS
 
@@ -42,38 +42,6 @@ G_BEGIN_DECLS
 #define GST_VALIDATE_ELEMENT_MONITOR_ELEMENT_IS_DECODER(m) (GST_VALIDATE_ELEMENT_MONITOR_CAST (m)->is_decoder)
 #define GST_VALIDATE_ELEMENT_MONITOR_ELEMENT_IS_ENCODER(m) (GST_VALIDATE_ELEMENT_MONITOR_CAST (m)->is_encoder)
 #define GST_VALIDATE_ELEMENT_MONITOR_ELEMENT_IS_DEMUXER(m) (GST_VALIDATE_ELEMENT_MONITOR_CAST (m)->is_demuxer)
-
-typedef struct _GstValidateElementMonitor GstValidateElementMonitor;
-typedef struct _GstValidateElementMonitorClass GstValidateElementMonitorClass;
-
-/**
- * GstValidateElementMonitor:
- *
- * GStreamer Validate ElementMonitor class.
- *
- * Class that wraps a #GstElement for Validate checks
- */
-struct _GstValidateElementMonitor {
-  GstValidateMonitor 	 parent;
-
-  /*< private >*/
-  gulong         pad_added_id;
-  GList         *pad_monitors;
-
-  gboolean       is_decoder;
-  gboolean       is_encoder;
-  gboolean       is_demuxer;
-};
-
-/**
- * GstValidateElementMonitorClass:
- * @parent_class: parent
- *
- * GStreamer Validate ElementMonitor object class.
- */
-struct _GstValidateElementMonitorClass {
-  GstValidateMonitorClass	parent_class;
-};
 
 /* normal GObject stuff */
 GType		gst_validate_element_monitor_get_type		(void);

@@ -151,7 +151,7 @@ _check_is_key_unit_cb (GstPad * pad, GstPadProbeInfo * info,
             GST_BUFFER_FLAG_DELTA_UNIT)) {
       if (kuinfo->count_bufs >= NOT_KF_AFTER_FORCE_KF_EVT_TOLERANCE) {
         GST_VALIDATE_REPORT (kuinfo->scenario,
-            SCENARIO_ACTION_EXECUTION_ERROR,
+            g_quark_from_string ("scenario::execution-error"),
             "Did not receive a key frame after requested one, "
             " at running_time %" GST_TIME_FORMAT " (with a %i "
             "frame tolerance)", GST_TIME_ARGS (kuinfo->running_time),
@@ -308,7 +308,8 @@ _execute_request_key_unit (GstValidateScenario * scenario,
 
 
   if (!gst_pad_send_event (pad, event)) {
-    GST_VALIDATE_REPORT (scenario, SCENARIO_ACTION_EXECUTION_ERROR,
+    GST_VALIDATE_REPORT (scenario,
+        g_quark_from_string ("scenario::execution-error"),
         "Could not send \"force key unit\" event %s", direction);
     goto fail;
   }
@@ -496,7 +497,7 @@ bus_callback (GstBus * bus, GstMessage * message, gpointer data)
       if (GST_IS_VALIDATE_SCENARIO (GST_MESSAGE_SRC (message))
           && state == GST_STATE_NULL) {
         GST_VALIDATE_REPORT (GST_MESSAGE_SRC (message),
-            SCENARIO_ACTION_EXECUTION_ISSUE,
+            g_quark_from_string ("scenario::execution-issue"),
             "Force stopping a transcoding pipeline is not recommanded"
             " you should make sure to finalize it using a EOS event");
 

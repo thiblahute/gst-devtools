@@ -21,7 +21,9 @@
 #include <gst/validate/gst-validate-pad-monitor.h>
 #include <gst/validate/media-descriptor-parser.h>
 #include <gst/check/gstcheck.h>
+
 #include "test-utils.h"
+#include "../../../gst/validate/gst-validate-internal.h"
 
 static void
 _check_reports_refcount (GstPad * pad, gint refcount)
