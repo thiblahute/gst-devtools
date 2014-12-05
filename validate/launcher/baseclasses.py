@@ -1035,6 +1035,23 @@ class TestsManager(Loggable):
     def print_valgrind_bugs(self):
         pass
 
+    def check_remove_and_new_tests(self, known_tests):
+        all_tests = []
+        removed_tests = []
+        added_tests = []
+
+        tests_names = [test.classname for test in self.list_tests()]
+        for test in known_tests:
+            if test and test not in tests_names:
+                removed_tests.append(test)
+
+        for test in tests_names:
+            all_tests.append(test)
+            if test and test not in known_tests:
+                added_tests.append(test)
+
+        return all_tests, removed_tests, added_tests
+
 
 class TestsGenerator(Loggable):
 
@@ -1127,11 +1144,13 @@ class _TestsLauncher(Loggable):
         testsuites = []
         for testsuite in self.options.testsuites:
             if not os.path.isabs(testsuite):
-                testsuite = os.path.join(self.options.testsuites_dir, testsuite + ".py")
+                testsuite = os.path.join(
+                    self.options.testsuites_dir, testsuite + ".py")
 
             try:
                 sys.path.insert(0, os.path.dirname(testsuite))
-                module = __import__(os.path.basename(testsuite).replace(".py", ""))
+                module = __import__(
+                    os.path.basename(testsuite).replace(".py", ""))
             except Exception as e:
                 printc("Could not load testsuite: %s, reason: %s"
                        % (testsuite, e), Colors.FAIL)
@@ -1222,17 +1241,16 @@ class _TestsLauncher(Loggable):
 
         for t in self.options.testsuites:
             if t != testsuite:
-                for other_testmanager in testsuite.TEST_MANAGER:
+                for other_testmanager in t.TEST_MANAGER:
                     if other_testmanager == tester.name:
                         return True
 
         return False
 
-    def _check_defined_tests(self, tester, tests):
+    def _check_defined_tests(self, tester):
         if self.options.blacklisted_tests or self.options.wanted_tests:
             return
 
-        tests_names = [test.classname for test in tests]
         for testsuite in self.options.testsuites:
             if not self._check_tester_has_other_testsuite(testsuite, tester) \
                     and tester.check_testslist:
@@ -1246,26 +1264,28 @@ class _TestsLauncher(Loggable):
                     testlist_file = open(os.path.splitext(testsuite.__file__)[0] + ".testslist",
                                          'w')
                 except IOError:
-                    return
+                    continue
 
-                for test in know_tests:
-                    if test and test not in tests_names:
-                        printc("Test %s Not in testsuite %s anymore"
-                               % (test, testsuite.__file__), Colors.FAIL)
+                all_tests, removed_tests, added_tests = \
+                    tester.check_remove_and_new_tests(known_tests)
 
-                for test in tests_names:
+                for test in removed_tests:
+                    printc("Test %s Not in testsuite %s anymore"
+                           % (test, testsuite.__file__), Colors.FAIL)
+
+                for test in added_tests:
+                    printc("Test %s is NEW in testsuite %s"
+                           % (test, testsuite.__file__), Colors.OKGREEN)
+
+                testlist_file = open(testlist_filename, 'w')
+                for test in all_tests:
                     testlist_file.write("%s\n" % test)
-                    if test and test not in know_tests:
-                        printc("Test %s is NEW in testsuite %s"
-                               % (test, testsuite.__file__), Colors.OKGREEN)
-
                 testlist_file.close()
-                return
 
     def list_tests(self):
         for tester in self.testers:
+            self._check_defined_tests(tester)
             tests = tester.list_tests()
-            self._check_defined_tests(tester, tests)
             self.tests.extend(tests)
         return sorted(list(self.tests))
 
@@ -1628,7 +1648,8 @@ class GstValidateMediaDescriptor(MediaDescriptor):
             if verbose:
                 printc("Result: Failed", Colors.FAIL)
             else:
-                loggable.warning("GstValidateMediaDescriptor", "Exception: %s" % e)
+                loggable.warning(
+                    "GstValidateMediaDescriptor", "Exception: %s" % e)
             return None
 
         if verbose:

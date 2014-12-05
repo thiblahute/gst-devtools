@@ -51,6 +51,7 @@ class Protocols(object):
     FILE = "file"
     HLS = "hls"
     DASH = "dash"
+    RTSP = "rtsp"
 
     @staticmethod
     def needs_clock_sync(protocol):

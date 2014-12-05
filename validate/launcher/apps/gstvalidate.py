@@ -17,6 +17,7 @@
 # Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 import os
+import copy
 import sys
 import time
 import urlparse
@@ -38,12 +39,14 @@ from launcher.utils import path2url, DEFAULT_TIMEOUT, which, \
 
 # definitions of commands to use
 GST_VALIDATE_COMMAND = "gst-validate-1.0"
+RTSP_SERVER_COMMAND = "test-uri"
 GST_VALIDATE_TRANSCODING_COMMAND = "gst-validate-transcoding-1.0"
 G_V_DISCOVERER_COMMAND = "gst-validate-media-check-1.0"
 if "win32" in sys.platform:
     GST_VALIDATE_COMMAND += ".exe"
     GST_VALIDATE_TRANSCODING_COMMAND += ".exe"
     G_V_DISCOVERER_COMMAND += ".exe"
+    RTSP_SERVER_COMMAND = "test-uri.exe"
 
 AUDIO_ONLY_FILE_TRANSCODING_RATIO = 5
 
@@ -58,6 +61,7 @@ GST_VALIDATE_CAPS_TO_PROTOCOL = [("application/x-hls", Protocols.HLS),
                                  ("application/dash+xml", Protocols.DASH)]
 GST_VALIDATE_PROTOCOL_TIMEOUTS = {Protocols.HTTP: 120,
                                   Protocols.HLS: 240,
+                                  Protocols.RTSP: 240,
                                   Protocols.DASH: 240}
 
 
@@ -240,6 +244,23 @@ class GstValidatePlaybinTestsGenerator(GstValidatePipelineTestsGenerator):
         GstValidatePipelineTestsGenerator.__init__(
             self, "playback", test_manager, "playbin")
 
+    def _set_sinks(self, minfo, pipe_str, scenario):
+        if self.test_manager.options.mute:
+            if scenario.needs_clock_sync() or \
+                    minfo.media_descriptor.need_clock_sync():
+                fakesink = "'fakesink sync=true'"
+            else:
+                fakesink = "'fakesink'"
+
+            pipe_str += " audio-sink=%s video-sink=%s" % (
+                fakesink, fakesink)
+
+        return pipe_str
+
+    def _get_name(self, scenario, protocol, minfo):
+        return "%s.%s" % (self.get_fname(scenario, protocol),
+                          os.path.basename(minfo.media_descriptor.get_clean_name()))
+
     def populate_tests(self, uri_minfo_special_scenarios, scenarios):
         for uri, minfo, special_scenarios in uri_minfo_special_scenarios:
             pipe = self._pipeline_template
@@ -252,19 +273,9 @@ class GstValidatePlaybinTestsGenerator(GstValidatePipelineTestsGenerator):
                 if not minfo.media_descriptor.is_compatible(scenario):
                     continue
 
-                if self.test_manager.options.mute:
-                    if scenario.needs_clock_sync() or \
-                            minfo.media_descriptor.need_clock_sync():
-                        fakesink = "'fakesink sync=true'"
-                    else:
-                        fakesink = "'fakesink'"
+                cpipe = self._set_sinks(minfo, cpipe, scenario)
+                fname = self._get_name(scenario, protocol, minfo)
 
-                    cpipe += " audio-sink=%s video-sink=%s" % (
-                        fakesink, fakesink)
-
-                fname = "%s.%s" % (self.get_fname(scenario,
-                                   protocol),
-                                   os.path.basename(minfo.media_descriptor.get_clean_name()))
                 self.debug("Adding: %s", fname)
 
                 if scenario.does_reverse_playback() and protocol == Protocols.HTTP:
@@ -518,12 +529,108 @@ class GstValidateTranscodingTest(GstValidateTest, GstValidateEncodingTestInterfa
         self.set_result(res, msg)
 
 
+class GstValidateRTSPTest(GstValidateLaunchTest):
+
+    def __init__(self, classname, options, reporter, pipeline_desc,
+                 local_uri, timeout=DEFAULT_TIMEOUT, scenario=None,
+                 media_descriptor=None):
+        self._local_uri = local_uri
+        super(GstValidateRTSPTest, self).__init__(classname, options,
+                                                  reporter, pipeline_desc,
+                                                  timeout, scenario, media_descriptor)
+
+    def run(self):
+        res = 0
+        command = RTSP_SERVER_COMMAND + " " + self._local_uri
+        rtsp_server = subprocess.Popen("exec " + command,
+                                       stderr=self.reporter.out,
+                                       stdout=self.reporter.out,
+                                       shell=True)
+
+        try:
+            res = super(GstValidateRTSPTest, self).run()
+        except KeyboardInterrupt:
+            rtsp_server.send_signal(signal.SIGINT)
+            raise
+
+        try:
+            rtsp_server.send_signal(signal.SIGINT)
+        except OSError:
+            pass
+
+        return res
+
+
+class GstValidateRTSPMediaDesciptor(GstValidateMediaDescriptor):
+
+    def __init__(self, xml_path):
+        GstValidateMediaDescriptor.__init__(self, xml_path)
+
+    def get_uri(self):
+        return "rtsp://127.0.0.1:8554/test"
+
+    def get_protocol(self):
+        return Protocols.RTSP
+
+
+class GstValidateRTSPTestGenerator(GstValidatePlaybinTestsGenerator):
+
+    '''
+    A test generator class that uses gst-rtsp-server/examples/test-uri
+    example to run the RTSP server
+    '''
+
+    def __init__(self, test_manager):
+        """
+        @test_manager: A test manager
+        """
+        GstValidatePlaybinTestsGenerator.__init__(self, test_manager)
+
+    def populate_tests(self, uri_minfo_special_scenarios, scenarios):
+
+        if not which(RTSP_SERVER_COMMAND):
+            printc("\n\nRTSP server not avalaible, you should make sure"
+                   " gst-rtsp-server/examples/test-uri is available in you $PATH.",
+                   Colors.FAIL)
+            return
+
+        for uri, minfo, special_scenarios in uri_minfo_special_scenarios:
+            protocol = minfo.media_descriptor.get_protocol()
+            if protocol != Protocols.FILE:
+                continue
+
+            if minfo.media_descriptor.is_image():
+                continue
+
+            old = minfo
+            minfo = copy.deepcopy(minfo)
+            minfo.media_descriptor = GstValidateRTSPMediaDesciptor(
+                minfo.media_descriptor.get_path())
+
+            for scenario in scenarios:
+                if scenario.seeks() or not minfo.media_descriptor.is_compatible(scenario):
+                    continue
+
+                cpipe = self._set_sinks(minfo, "%s uri=rtsp://127.0.0.1:8554/test"
+                                        % self._pipeline_template, scenario)
+                fname = self._get_name(scenario, Protocols.RTSP, minfo)
+
+                self.add_test(GstValidateRTSPTest(fname,
+                                                  self.test_manager.options,
+                                                  self.test_manager.reporter,
+                                                  cpipe,
+                                                  uri,
+                                                  scenario=scenario,
+                                                  media_descriptor=minfo.media_descriptor))
+
+
 class GstValidateTestManager(GstValidateBaseTestManager):
 
     name = "validate"
 
     # List of all classes to create testsuites
     GstValidateMediaCheckTestsGenerator = GstValidateMediaCheckTestsGenerator
+    GstValidateRTSPTestGenerator = GstValidateRTSPTestGenerator
     GstValidateTranscodingTestsGenerator = GstValidateTranscodingTestsGenerator
     GstValidatePipelineTestsGenerator = GstValidatePipelineTestsGenerator
     GstValidatePlaybinTestsGenerator = GstValidatePlaybinTestsGenerator
@@ -845,4 +952,23 @@ not been tested and explicitely activated if you set use --wanted-tests ALL""")
         self.add_generators([GstValidatePlaybinTestsGenerator(self),
                              GstValidateMediaCheckTestsGenerator(self),
                              GstValidateTranscodingTestsGenerator(self)])
-        self._default_generators_registered = True
+        self._default_generators_registers = True
+
+    def check_remove_and_new_tests(self, known_tests):
+        all_tests, removed_tests, added_tests = \
+            super(GstValidateTestManager, self).check_remove_and_new_tests(
+                known_tests)
+
+        if not bool(which(RTSP_SERVER_COMMAND)):
+            message = "RTSP server not available, not running following tests:\n"
+            removed = []
+            for test in removed_tests:
+                if Protocols.RTSP in test:
+                    message += "    * %s\n" % test
+                    all_tests.append(test)
+                else:
+                    removed.append(test)
+            removed_tests = removed
+            printc(message, Colors.FAIL)
+
+        return all_tests, removed_tests, added_tests

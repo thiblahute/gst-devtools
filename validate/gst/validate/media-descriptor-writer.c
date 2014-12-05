@@ -135,7 +135,7 @@ serialize_filenode (GstMediaDescriptorWriter * writer)
     caps_str = g_strdup ("");
 
   res = g_string_new (tmpstr);
-  g_string_append_printf (res, "  <streams caps=\"%s\">", caps_str);
+  g_string_append_printf (res, "  <streams caps=\"%s\">\n", caps_str);
   g_free (caps_str);
   g_free (tmpstr);
   for (tmp = filenode->streams; tmp; tmp = tmp->next) {
@@ -199,6 +199,26 @@ gst_media_descriptor_writer_new (GstValidateRunner * runner,
 }
 
 static gboolean
+stream_is_rtp (GstDiscovererStreamInfo * info)
+{
+  gboolean ret = FALSE;
+  GstStructure *st;
+  GstCaps *caps = gst_discoverer_stream_info_get_caps (info);
+
+  if (gst_caps_get_size (caps) != 1)
+    goto done;
+
+  st = gst_caps_get_structure (caps, 0);
+  if (gst_structure_has_name (st, "application/x-rtp"))
+    ret = TRUE;
+
+done:
+  gst_caps_unref (caps);
+  return ret;
+
+}
+
+static gboolean
 gst_media_descriptor_writer_add_stream (GstMediaDescriptorWriter * writer,
     GstDiscovererStreamInfo * info)
 {
@@ -216,9 +236,11 @@ gst_media_descriptor_writer_add_stream (GstMediaDescriptorWriter * writer,
   snode->cframe = NULL;
 
   snode->id = g_strdup (gst_discoverer_stream_info_get_stream_id (info));
+  GST_ERROR ("Not ID!");
   if (snode->id == NULL) {
     caps = gst_discoverer_stream_info_get_caps (info);
     capsstr = gst_caps_to_string (caps);
+    GST_ERROR ("Caps is %s", capsstr);
 
     g_slice_free (StreamNode, snode);
     GST_VALIDATE_REPORT (writer, FILE_NO_STREAM_ID,
@@ -242,6 +264,7 @@ gst_media_descriptor_writer_add_stream (GstMediaDescriptorWriter * writer,
   } else if (GST_IS_DISCOVERER_SUBTITLE_INFO (info)) {
     stype = "subtitle";
   } else {
+    GST_ERROR ("FUCKING NOT KNOWN");
     stype = "Unknown";
   }
 
@@ -469,8 +492,8 @@ _run_frame_analysis (GstMediaDescriptorWriter * writer,
   writer->priv->pipeline = gst_pipeline_new ("frame-analysis");
 
   monitor =
-      gst_validate_monitor_factory_create (GST_OBJECT_CAST (writer->
-          priv->pipeline), runner, NULL);
+      gst_validate_monitor_factory_create (GST_OBJECT_CAST (writer->priv->
+          pipeline), runner, NULL);
   gst_validate_reporter_set_handle_g_logs (GST_VALIDATE_REPORTER (monitor));
 
   g_object_set (uridecodebin, "uri", uri, "caps", writer->priv->raw_caps, NULL);
@@ -587,7 +610,13 @@ gst_media_descriptor_writer_new_discover (GstValidateRunner * runner,
         gst_media_descriptor_writer_add_stream (writer, tmp->data);
       }
     } else {
-      gst_media_descriptor_writer_add_stream (writer, streaminfo);
+      if (stream_is_rtp (streaminfo)) {
+        ((GstMediaDescriptor *) writer)->filenode->caps =
+            gst_discoverer_stream_info_get_caps (GST_DISCOVERER_STREAM_INFO
+            (streaminfo));
+      } else {
+        gst_media_descriptor_writer_add_stream (writer, streaminfo);
+      }
     }
   } else {
     GST_VALIDATE_REPORT (writer, FILE_NO_STREAM_INFO,
@@ -597,6 +626,7 @@ gst_media_descriptor_writer_new_discover (GstValidateRunner * runner,
   media_descriptor = (GstMediaDescriptor *) writer;
   if (streams == NULL && media_descriptor->filenode->caps)
     writer->priv->raw_caps = gst_caps_copy (media_descriptor->filenode->caps);
+
   gst_discoverer_stream_info_list_free (streams);
 
 

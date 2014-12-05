@@ -41,7 +41,9 @@ class HTTPServer(loggable.Loggable):
         start = time.time()
         while True:
             try:
-                subprocess.check_output(["wget", "127.0.0.1:%s" %
+                print("Running %s" % "wget 127.0.0.1:%s" % (self.options.http_server_port))
+
+                subprocess.check_output(["wget", "http://127.0.0.1:%s" %
                                          (self.options.http_server_port),
                                          "-O", os.devnull],
                                         stderr=self._logsfile)
@@ -62,7 +64,7 @@ class HTTPServer(loggable.Loggable):
             if self._check_is_up(timeout=2):
                 return True
 
-            print "Starting Server"
+            print("Starting Server on %s" % self.options.http_server_dir)
             try:
                 self.debug("Lunching http server")
                 cmd = "%s %s %d %s" % (sys.executable, os.path.join(os.path.dirname(__file__),

@@ -1302,6 +1302,7 @@ static void
     switch (gst_iterator_next (iter, &value)) {
       case GST_ITERATOR_OK:
         otherpad = g_value_get_object (&value);
+        GST_ERROR ("Otherpad is %" GST_PTR_FORMAT, otherpad);
         othermonitor =
             g_object_get_data ((GObject *) otherpad, "validate-monitor");
         if (othermonitor) {
