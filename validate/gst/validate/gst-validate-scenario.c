@@ -127,6 +127,9 @@ struct _GstValidateScenarioPrivate
   guint wait_id;
   guint signal_handler_id;
 
+  /* Name of message the wait action is waiting for */
+  const gchar *message_name;
+
   gboolean buffering;
 
   gboolean changing_state;
@@ -902,7 +905,7 @@ _add_execute_actions_gsource (GstValidateScenario * scenario)
 
   SCENARIO_LOCK (scenario);
   if (priv->get_pos_id == 0 && priv->wait_id == 0
-      && priv->signal_handler_id == 0) {
+      && priv->signal_handler_id == 0 && priv->message_name == NULL) {
     priv->get_pos_id = g_idle_add ((GSourceFunc) execute_next_action, scenario);
     SCENARIO_UNLOCK (scenario);
 
@@ -1491,10 +1494,45 @@ _execute_wait_signal (GstValidateScenario * scenario,
 }
 
 static gboolean
+_execute_wait_message (GstValidateScenario * scenario,
+    GstValidateAction * action)
+{
+  GstValidateScenarioPrivate *priv = scenario->priv;
+  const gchar *message_name = gst_structure_get_string
+      (action->structure, "message-name");
+  GstElement *target;
+
+  if (message_name == NULL) {
+    GST_ERROR ("No message-name given for wait action");
+    return FALSE;
+  }
+
+  target = _get_target_element (scenario, action);
+  if (target == NULL) {
+    return FALSE;
+  }
+
+  gst_validate_printf (action, "Waiting for '%s' message\n", message_name);
+
+  if (priv->get_pos_id) {
+    g_source_remove (priv->get_pos_id);
+    priv->get_pos_id = 0;
+  }
+
+  priv->message_name = g_strdup (message_name);
+
+  gst_object_unref (target);
+
+  return GST_VALIDATE_EXECUTE_ACTION_ASYNC;
+}
+
+static gboolean
 _execute_wait (GstValidateScenario * scenario, GstValidateAction * action)
 {
   if (gst_structure_has_field (action->structure, "signal-name")) {
     return _execute_wait_signal (scenario, action);
+  } else if (gst_structure_has_field (action->structure, "message-name")) {
+    return _execute_wait_message (scenario, action);
   } else {
     return _execute_wait_time (scenario, action);
   }
@@ -1719,6 +1757,26 @@ gst_validate_action_default_prepare_func (GstValidateAction * action)
   return TRUE;
 }
 
+static void
+_check_waiting_for_message (GstValidateScenario * scenario,
+    GstMessage * message)
+{
+  GstValidateScenarioPrivate *priv = scenario->priv;
+
+  if (!g_strcmp0 (priv->message_name,
+          gst_message_type_get_name (GST_MESSAGE_TYPE (message)))) {
+    GstValidateAction *action = scenario->priv->actions->data;
+
+    g_free ((gpointer) priv->message_name);
+    priv->message_name = NULL;
+
+    gst_validate_printf (scenario, "Stop waiting for message\n");
+
+    gst_validate_action_set_done (action);
+    _add_get_position_source (scenario);
+  }
+}
+
 static gboolean
 message_cb (GstBus * bus, GstMessage * message, GstValidateScenario * scenario)
 {
@@ -1841,6 +1899,10 @@ message_cb (GstBus * bus, GstMessage * message, GstValidateScenario * scenario)
     default:
       break;
   }
+
+  /* Check if we got the message expected by a wait action */
+  if (priv->message_name)
+    _check_waiting_for_message (scenario, message);
 
   return TRUE;
 }
@@ -2975,9 +3037,16 @@ init_scenarios (void)
           .types = "string",
           NULL
         },
+        {
+          .name = "message-name",
+          .description = "The name of the message to wait for on @target-element-name",
+          .mandatory = FALSE,
+          .types = "string",
+          NULL
+        },
         {NULL}
       }),
-      "Waits for signal 'signal-name' or during 'duration' seconds",
+      "Waits for signal 'signal-name', message 'message-name', or during 'duration' seconds",
       GST_VALIDATE_ACTION_TYPE_NONE);
 
   REGISTER_ACTION_TYPE ("dot-pipeline", _execute_dot_pipeline, NULL,
