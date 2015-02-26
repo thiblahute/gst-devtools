@@ -1491,154 +1491,6 @@ gst_validate_action_default_prepare_func (GstValidateAction * action)
   return TRUE;
 }
 
-static gboolean
-message_cb (GstBus * bus, GstMessage * message, GstValidateScenario * scenario)
-{
-  GstValidateScenarioPrivate *priv = scenario->priv;
-
-  switch (GST_MESSAGE_TYPE (message)) {
-    case GST_MESSAGE_ASYNC_DONE:
-      if (priv->last_seek) {
-        gst_validate_scenario_update_segment_from_seek (scenario,
-            priv->last_seek);
-
-        if (priv->target_state == GST_STATE_PAUSED)
-          priv->seeked_in_pause = TRUE;
-
-        gst_event_replace (&priv->last_seek, NULL);
-        gst_validate_action_set_done (priv->actions->data);
-      }
-
-      if (priv->needs_parsing) {
-        GList *tmp;
-
-        for (tmp = priv->needs_parsing; tmp; tmp = tmp->next) {
-          GstValidateAction *action = tmp->data;
-
-          if (!_set_action_playback_time (scenario, action))
-            return FALSE;
-
-          priv->actions = g_list_insert_sorted (priv->actions, action,
-              (GCompareFunc) _compare_actions);
-        }
-
-        g_list_free (priv->needs_parsing);
-        priv->needs_parsing = NULL;
-      }
-      _add_get_position_source (scenario);
-      break;
-    case GST_MESSAGE_STATE_CHANGED:
-    {
-      if (GST_MESSAGE_SRC (message) == GST_OBJECT (scenario->pipeline)) {
-        GstState nstate, pstate;
-
-        gst_message_parse_state_changed (message, &pstate, &nstate, NULL);
-
-        if (scenario->priv->target_state == nstate) {
-          if (scenario->priv->actions &&
-              _action_sets_state (scenario->priv->actions->data))
-            gst_validate_action_set_done (priv->actions->data);
-          scenario->priv->changing_state = FALSE;
-        }
-
-        if (pstate == GST_STATE_READY && nstate == GST_STATE_PAUSED)
-          _add_get_position_source (scenario);
-      }
-      break;
-    }
-    case GST_MESSAGE_ERROR:
-    case GST_MESSAGE_EOS:
-    {
-      SCENARIO_LOCK (scenario);
-      if (scenario->priv->actions || scenario->priv->interlaced_actions ||
-          scenario->priv->on_addition_actions) {
-        guint nb_actions = 0;
-        gchar *actions = g_strdup (""), *tmpconcat;
-        GList *tmp;
-        GList *all_actions =
-            g_list_concat (g_list_concat (scenario->priv->actions,
-                scenario->priv->interlaced_actions),
-            scenario->priv->on_addition_actions);
-
-        for (tmp = all_actions; tmp; tmp = tmp->next) {
-          gchar *action_string;
-          GstValidateAction *action = ((GstValidateAction *) tmp->data);
-          GstValidateActionType *type = _find_action_type (action->type);
-
-          tmpconcat = actions;
-
-          if (type->flags & GST_VALIDATE_ACTION_TYPE_NO_EXECUTION_NOT_FATAL) {
-            gst_validate_action_unref (action);
-
-            continue;
-          }
-
-          nb_actions++;
-
-          action_string = gst_structure_to_string (action->structure);
-          actions =
-              g_strdup_printf ("%s\n%*s%s", actions, 20, "", action_string);
-          gst_validate_action_unref (action);
-          g_free (tmpconcat);
-          g_free (action_string);
-        }
-        g_list_free (all_actions);
-        scenario->priv->actions = NULL;
-        scenario->priv->interlaced_actions = NULL;
-
-        if (nb_actions > 0)
-          GST_VALIDATE_REPORT (scenario, SCENARIO_NOT_ENDED,
-              "%i actions were not executed: %s", nb_actions, actions);
-        g_free (actions);
-      }
-      SCENARIO_UNLOCK (scenario);
-
-      break;
-    }
-    case GST_MESSAGE_BUFFERING:
-    {
-      gint percent;
-
-      gst_message_parse_buffering (message, &percent);
-
-      if (percent == 100)
-        priv->buffering = FALSE;
-      else
-        priv->buffering = TRUE;
-
-      g_print ("%s %d%%  \r", "Buffering...", percent);
-      break;
-    }
-    default:
-      break;
-  }
-
-  return TRUE;
-}
-
-static void
-_pipeline_freed_cb (GstValidateScenario * scenario,
-    GObject * where_the_object_was)
-{
-  GstValidateScenarioPrivate *priv = scenario->priv;
-
-  SCENARIO_LOCK (scenario);
-  if (priv->get_pos_id) {
-    g_source_remove (priv->get_pos_id);
-    priv->get_pos_id = 0;
-  }
-
-  if (priv->wait_id) {
-    g_source_remove (priv->wait_id);
-    priv->wait_id = 0;
-  }
-  SCENARIO_UNLOCK (scenario);
-
-  scenario->pipeline = NULL;
-
-  GST_DEBUG_OBJECT (scenario, "pipeline was freed");
-}
-
 static GstValidateExecuteActionReturn
 _fill_action (GstValidateScenario * scenario, GstValidateAction * action,
     GstStructure * structure, gboolean add_to_lists)
@@ -1708,6 +1560,164 @@ _fill_action (GstValidateScenario * scenario, GstValidateAction * action,
   }
 
   return res;
+}
+
+
+static gboolean
+message_cb (GstBus * bus, GstMessage * message, GstValidateScenario * scenario)
+{
+  GstValidateScenarioPrivate *priv = scenario->priv;
+
+  switch (GST_MESSAGE_TYPE (message)) {
+    case GST_MESSAGE_ASYNC_DONE:
+      if (priv->last_seek) {
+        gst_validate_scenario_update_segment_from_seek (scenario,
+            priv->last_seek);
+
+        if (priv->target_state == GST_STATE_PAUSED)
+          priv->seeked_in_pause = TRUE;
+
+        gst_event_replace (&priv->last_seek, NULL);
+        gst_validate_action_set_done (priv->actions->data);
+      }
+
+      if (priv->needs_parsing) {
+        GList *tmp;
+
+        for (tmp = priv->needs_parsing; tmp; tmp = tmp->next) {
+          GstValidateAction *action = tmp->data;
+
+          if (!_set_action_playback_time (scenario, action))
+            return FALSE;
+
+          priv->actions = g_list_insert_sorted (priv->actions, action,
+              (GCompareFunc) _compare_actions);
+        }
+
+        g_list_free (priv->needs_parsing);
+        priv->needs_parsing = NULL;
+      }
+      _add_get_position_source (scenario);
+      break;
+    case GST_MESSAGE_STATE_CHANGED:
+    {
+      if (GST_MESSAGE_SRC (message) == GST_OBJECT (scenario->pipeline)) {
+        GstState nstate, pstate;
+
+        gst_message_parse_state_changed (message, &pstate, &nstate, NULL);
+
+        if (scenario->priv->target_state == nstate) {
+          if (scenario->priv->actions &&
+              _action_sets_state (scenario->priv->actions->data))
+            gst_validate_action_set_done (priv->actions->data);
+          scenario->priv->changing_state = FALSE;
+        }
+
+        if (pstate == GST_STATE_READY && nstate == GST_STATE_PAUSED)
+          _add_get_position_source (scenario);
+      }
+      break;
+    }
+    case GST_MESSAGE_ERROR:
+    case GST_MESSAGE_EOS:
+    {
+      GstValidateAction *stop_action;
+      GstValidateActionType *stop_action_type;
+
+      SCENARIO_LOCK (scenario);
+      if (scenario->priv->actions || scenario->priv->interlaced_actions ||
+          scenario->priv->on_addition_actions) {
+        guint nb_actions = 0;
+        gchar *actions = g_strdup (""), *tmpconcat;
+        GList *tmp;
+        GList *all_actions =
+            g_list_concat (g_list_concat (scenario->priv->actions,
+                scenario->priv->interlaced_actions),
+            scenario->priv->on_addition_actions);
+
+        for (tmp = all_actions; tmp; tmp = tmp->next) {
+          gchar *action_string;
+          GstValidateAction *action = ((GstValidateAction *) tmp->data);
+          GstValidateActionType *type = _find_action_type (action->type);
+
+          tmpconcat = actions;
+
+          if (type->flags & GST_VALIDATE_ACTION_TYPE_NO_EXECUTION_NOT_FATAL) {
+            gst_validate_action_unref (action);
+
+            continue;
+          }
+
+          nb_actions++;
+
+          action_string = gst_structure_to_string (action->structure);
+          actions =
+              g_strdup_printf ("%s\n%*s%s", actions, 20, "", action_string);
+          gst_validate_action_unref (action);
+          g_free (tmpconcat);
+          g_free (action_string);
+        }
+        g_list_free (all_actions);
+        scenario->priv->actions = NULL;
+        scenario->priv->interlaced_actions = NULL;
+
+        if (nb_actions > 0)
+          GST_VALIDATE_REPORT (scenario, SCENARIO_NOT_ENDED,
+              "%i actions were not executed: %s", nb_actions, actions);
+        g_free (actions);
+      }
+      SCENARIO_UNLOCK (scenario);
+
+      stop_action_type = _find_action_type ("stop");
+      stop_action = gst_validate_action_new (scenario, stop_action_type);
+      _fill_action (scenario, stop_action,
+          gst_structure_from_string ("stop;", NULL), FALSE);
+      gst_validate_execute_action (stop_action_type, stop_action);
+
+      break;
+    }
+    case GST_MESSAGE_BUFFERING:
+    {
+      gint percent;
+
+      gst_message_parse_buffering (message, &percent);
+
+      if (percent == 100)
+        priv->buffering = FALSE;
+      else
+        priv->buffering = TRUE;
+
+      g_print ("%s %d%%  \r", "Buffering...", percent);
+      break;
+    }
+    default:
+      break;
+  }
+
+  return TRUE;
+}
+
+static void
+_pipeline_freed_cb (GstValidateScenario * scenario,
+    GObject * where_the_object_was)
+{
+  GstValidateScenarioPrivate *priv = scenario->priv;
+
+  SCENARIO_LOCK (scenario);
+  if (priv->get_pos_id) {
+    g_source_remove (priv->get_pos_id);
+    priv->get_pos_id = 0;
+  }
+
+  if (priv->wait_id) {
+    g_source_remove (priv->wait_id);
+    priv->wait_id = 0;
+  }
+  SCENARIO_UNLOCK (scenario);
+
+  scenario->pipeline = NULL;
+
+  GST_DEBUG_OBJECT (scenario, "pipeline was freed");
 }
 
 static gboolean
