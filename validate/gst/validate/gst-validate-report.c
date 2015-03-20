@@ -125,6 +125,7 @@ gst_validate_issue_new (GstValidateIssueId issue_id, const gchar * summary,
   issue->area = area_name[0];
   issue->name = area_name[1];
 
+  g_free (area_name);
   return issue;
 }
 
@@ -386,6 +387,8 @@ gst_validate_report_init (void)
 
       log_files[i] = log_file;
     }
+
+    g_strfreev (wanted_files);
   } else {
     log_files = g_malloc0 (sizeof (FILE *) * 2);
     log_files[0] = stdout;
@@ -576,7 +579,7 @@ gst_validate_print_action (GstValidateAction * action, const gchar * message)
   GString *string = NULL;
 
   if (message == NULL) {
-    GString *string = g_string_new (gst_structure_get_name (action->structure));
+    string = g_string_new (gst_structure_get_name (action->structure));
 
     g_string_append_len (string, ": ", 2);
     gst_structure_foreach (action->structure,
