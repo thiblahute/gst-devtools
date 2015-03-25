@@ -28,174 +28,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <gst/gst.h>
-#include <gio/gio.h>
-#include <gst/validate/validate.h>
-#include <gst/validate/gst-validate-scenario.h>
+#include "gst-validator.h"
 #include <gst/validate/gst-validate-utils.h>
-#include <gst/validate/media-descriptor-parser.h>
-
-#ifdef G_OS_UNIX
-#include <glib-unix.h>
-#endif
-
-static gint ret = 0;
-static GMainLoop *mainloop;
-static GstElement *pipeline;
-static gboolean buffering = FALSE;
-
-static gboolean is_live = FALSE;
-
-#ifdef G_OS_UNIX
-static gboolean
-intr_handler (gpointer user_data)
-{
-  g_print ("interrupt received.\n");
-
-  GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (pipeline),
-      GST_DEBUG_GRAPH_SHOW_ALL, "gst-validate.interupted");
-
-  g_main_loop_quit (mainloop);
-
-  ret = SIGINT;
-
-  /* Keep signal handler, it will be removed later anyway */
-  return TRUE;
-}
-#endif /* G_OS_UNIX */
+#include <gst/validate/gst-validate-scenario.h>
 
 static gboolean
-bus_callback (GstBus * bus, GstMessage * message, gpointer data)
+_is_playbin_pipeline (GstElement * pipeline)
 {
-  GMainLoop *loop = data;
+  GstElementFactory *factory;
 
-  switch (GST_MESSAGE_TYPE (message)) {
-    case GST_MESSAGE_ERROR:
-    {
-      GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (pipeline),
-          GST_DEBUG_GRAPH_SHOW_ALL, "gst-validate.error");
+  if (!pipeline)
+    return TRUE;
 
-      g_main_loop_quit (loop);
-      break;
-    }
-    case GST_MESSAGE_EOS:
-      g_main_loop_quit (loop);
-      break;
-    case GST_MESSAGE_ASYNC_DONE:
-      break;
-    case GST_MESSAGE_STATE_CHANGED:
-      if (GST_MESSAGE_SRC (message) == GST_OBJECT (pipeline)) {
-        GstState oldstate, newstate, pending;
-        gchar *dump_name;
-        gchar *state_transition_name;
+  factory = gst_element_get_factory (pipeline);
 
-        gst_message_parse_state_changed (message, &oldstate, &newstate,
-            &pending);
-
-        GST_DEBUG ("State changed (old: %s, new: %s, pending: %s)",
-            gst_element_state_get_name (oldstate),
-            gst_element_state_get_name (newstate),
-            gst_element_state_get_name (pending));
-
-        state_transition_name = g_strdup_printf ("%s_%s",
-            gst_element_state_get_name (oldstate),
-            gst_element_state_get_name (newstate));
-        dump_name = g_strconcat ("ges-launch.", state_transition_name, NULL);
-
-
-        GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (pipeline),
-            GST_DEBUG_GRAPH_SHOW_ALL, dump_name);
-
-        g_free (dump_name);
-        g_free (state_transition_name);
-      }
-
-      break;
-    case GST_MESSAGE_WARNING:{
-      GError *gerror;
-      gchar *debug;
-      gchar *name = gst_object_get_path_string (GST_MESSAGE_SRC (message));
-
-      /* dump graph on warning */
-      GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (pipeline),
-          GST_DEBUG_GRAPH_SHOW_ALL, "gst-validate.warning");
-
-      gst_message_parse_warning (message, &gerror, &debug);
-      g_print ("WARNING: from element %s: %s\n", name, gerror->message);
-      if (debug)
-        g_print ("Additional debug info:\n%s\n", debug);
-
-      g_error_free (gerror);
-      g_free (debug);
-      g_free (name);
-      break;
-    }
-    case GST_MESSAGE_BUFFERING:{
-      gint percent;
-      GstBufferingMode mode;
-
-      if (!buffering) {
-        g_print ("\n");
-      }
-
-      gst_message_parse_buffering (message, &percent);
-      gst_message_parse_buffering_stats (message, &mode, NULL, NULL, NULL);
-      g_print ("%s %d%%  \r", "Buffering...", percent);
-
-      /* no state management needed for live pipelines */
-      if (mode == GST_BUFFERING_LIVE) {
-        is_live = TRUE;
-        break;
-      }
-
-      if (percent == 100) {
-        /* a 100% message means buffering is done */
-        if (buffering) {
-          buffering = FALSE;
-          g_print ("Done buffering, setting pipeline to PLAYING\n");
-          gst_element_set_state (pipeline, GST_STATE_PLAYING);
-        }
-      } else {
-        /* buffering... */
-        if (!buffering) {
-          g_print ("Start buffering, setting pipeline to PAUSED\n");
-          gst_element_set_state (pipeline, GST_STATE_PAUSED);
-          buffering = TRUE;
-        }
-      }
-      break;
-    }
-    case GST_MESSAGE_REQUEST_STATE:
-    {
-      GstState state;
-
-      gst_message_parse_request_state (message, &state);
-
-      if (GST_IS_VALIDATE_SCENARIO (GST_MESSAGE_SRC (message))
-          && state == GST_STATE_NULL) {
-        gst_validate_printf (GST_MESSAGE_SRC (message),
-            "State change request NULL, " "quiting mainloop\n");
-        g_main_loop_quit (mainloop);
-      }
-      break;
-    }
-    default:
-      break;
-  }
-
-  return TRUE;
-}
-
-static gboolean
-_is_playbin_pipeline (int argc, gchar ** argv)
-{
-  gint i;
-
-  for (i = 0; i < argc; i++) {
-    if (g_strcmp0 (argv[i], "playbin") == 0) {
-      return TRUE;
-    }
-  }
+  if (g_strcmp0 (GST_OBJECT_NAME (factory), "playbin") == 0)
+    return TRUE;
 
   return FALSE;
 }
@@ -339,9 +187,13 @@ _execute_switch_track (GstValidateScenario * scenario,
   return res;
 }
 
-static void
-_register_playbin_actions (void)
+static gboolean
+_register_playbin_actions (GstValidator * validator, GstElement * pipeline)
 {
+
+  if (!_is_playbin_pipeline (pipeline))
+    return TRUE;
+
 /* *INDENT-OFF* */
   gst_validate_register_action_type ("set-subtitle", "validate-launcher", _execute_set_subtitles,
       (GstValidateActionParameter []) {
@@ -398,233 +250,42 @@ _register_playbin_actions (void)
       "track'), note that you need to state that it is a string in the scenario file\n"
       "prefixing it with (string).", FALSE);
 /* *INDENT-ON* */
+
+  return TRUE;
+}
+
+static GstElement *
+_create_pipeline (GstValidator * validator, gint argc, gchar ** argv,
+    GError ** error)
+{
+  GstElement *pipeline;
+
+  gchar **argvn = g_new0 (char *, argc);
+  memcpy (argvn, argv + 1, sizeof (char *) * (argc - 1));
+
+  pipeline = (GstElement *) gst_parse_launchv ((const gchar **) argvn, error);
+
+  g_free (argvn);
+
+  GST_ERROR ("Returning Pipeline %p", pipeline);
+
+  return pipeline;
 }
 
 int
 main (int argc, gchar ** argv)
 {
-  GError *err = NULL;
-  gchar *scenario = NULL, *configs = NULL, *media_info = NULL;
-  gboolean list_scenarios = FALSE, monitor_handles_state,
-      inspect_action_type = FALSE;
-  GstStateChangeReturn sret;
-  gchar *output_file = NULL;
+  gboolean ret;
+  GstValidator *validator = gst_validator_new ("launcher");
 
-#ifdef G_OS_UNIX
-  guint signal_watch_id;
-#endif
-  int rep_err;
+  g_signal_connect (validator, "create-pipeline", G_CALLBACK (_create_pipeline),
+      NULL);
+  g_signal_connect (validator, "register-action-types",
+      G_CALLBACK (_register_playbin_actions), NULL);
 
-  GOptionEntry options[] = {
-    {"set-scenario", '\0', 0, G_OPTION_ARG_STRING, &scenario,
-        "Let you set a scenario, it can be a full path to a scenario file"
-          " or the name of the scenario (name of the file without the"
-          " '.scenario' extension).", NULL},
-    {"list-scenarios", 'l', 0, G_OPTION_ARG_NONE, &list_scenarios,
-        "List the avalaible scenarios that can be run", NULL},
-    {"scenarios-defs-output-file", '\0', 0, G_OPTION_ARG_FILENAME,
-          &output_file, "The output file to store scenarios details. "
-          "Implies --list-scenario",
-        NULL},
-    {"inspect-action-type", 't', 0, G_OPTION_ARG_NONE, &inspect_action_type,
-          "Inspect the avalaible action types with which to write scenarios"
-          " if no parameter passed, it will list all avalaible action types"
-          " otherwize will print the full description of the wanted types",
-        NULL},
-    {"set-media-info", '\0', 0, G_OPTION_ARG_STRING, &media_info,
-          "Set a media_info XML file descriptor to share information about the"
-          " media file that will be reproduced.",
-        NULL},
-    {"set-configs", '\0', 0, G_OPTION_ARG_STRING, &configs,
-          "Let you set a config scenario, the scenario needs to be set as 'config"
-          "' you can specify a list of scenario separated by ':'"
-          " it will override the GST_VALIDATE_SCENARIO environment variable.",
-        NULL},
-    {NULL}
-  };
-  GOptionContext *ctx;
-  gchar **argvn;
-  GstValidateRunner *runner;
-  GstValidateMonitor *monitor;
-  GstBus *bus;
-
-  g_set_prgname ("gst-validate-" GST_API_VERSION);
-  ctx = g_option_context_new ("PIPELINE-DESCRIPTION");
-  g_option_context_add_main_entries (ctx, options, NULL);
-  g_option_context_set_summary (ctx, "Runs a gst launch pipeline, adding "
-      "monitors to it to identify issues in the used elements. At the end"
-      " a report will be printed. To view issues as they are created, set"
-      " the env var GST_DEBUG=validate:2 and it will be printed "
-      "as gstreamer debugging");
-
-  if (argc == 1) {
-    g_print ("%s", g_option_context_get_help (ctx, FALSE, NULL));
-    exit (1);
-  }
-
-  if (!g_option_context_parse (ctx, &argc, &argv, &err)) {
-    g_printerr ("Error initializing: %s\n", err->message);
-    g_option_context_free (ctx);
-    g_clear_error (&err);
-    exit (1);
-  }
-
-  if (scenario || configs) {
-    gchar *scenarios;
-
-    if (scenario)
-      scenarios = g_strjoin (":", scenario, configs, NULL);
-    else
-      scenarios = g_strdup (configs);
-
-    g_setenv ("GST_VALIDATE_SCENARIO", scenarios, TRUE);
-    g_free (scenarios);
-    g_free (scenario);
-    g_free (configs);
-  }
-
-  gst_init (&argc, &argv);
-  gst_validate_init ();
-
-  if (list_scenarios || output_file) {
-    if (gst_validate_list_scenarios (argv + 1, argc - 1, output_file))
-      return 1;
-    return 0;
-  }
-
-  if (inspect_action_type) {
-    _register_playbin_actions ();
-
-    if (!gst_validate_print_action_types ((const gchar **) argv + 1, argc - 1)) {
-      GST_ERROR ("Could not print all wanted types");
-      return -1;
-    }
-
-    return 0;
-  }
-
-  if (argc == 1) {
-    g_print ("%s", g_option_context_get_help (ctx, FALSE, NULL));
-    g_option_context_free (ctx);
-    exit (1);
-  }
-
-  g_option_context_free (ctx);
-
-  /* Create the pipeline */
-  argvn = g_new0 (char *, argc);
-  memcpy (argvn, argv + 1, sizeof (char *) * (argc - 1));
-  pipeline = (GstElement *) gst_parse_launchv ((const gchar **) argvn, &err);
-  g_free (argvn);
-  if (!pipeline) {
-    g_print ("Failed to create pipeline: %s\n",
-        err ? err->message : "unknown reason");
-    g_clear_error (&err);
-    exit (1);
-  }
-  if (!GST_IS_PIPELINE (pipeline)) {
-    GstElement *new_pipeline = gst_pipeline_new ("");
-
-    gst_bin_add (GST_BIN (new_pipeline), pipeline);
-    pipeline = new_pipeline;
-  }
-
-  gst_pipeline_set_auto_flush_bus (GST_PIPELINE (pipeline), FALSE);
-#ifdef G_OS_UNIX
-  signal_watch_id =
-      g_unix_signal_add (SIGINT, (GSourceFunc) intr_handler, pipeline);
-#endif
-
-  if (_is_playbin_pipeline (argc, argv + 1)) {
-    _register_playbin_actions ();
-  }
-
-  runner = gst_validate_runner_new ();
-  if (!runner) {
-    g_printerr ("Failed to setup Validate Runner\n");
-    exit (1);
-  }
-
-  monitor = gst_validate_monitor_factory_create (GST_OBJECT_CAST (pipeline),
-      runner, NULL);
-  gst_validate_reporter_set_handle_g_logs (GST_VALIDATE_REPORTER (monitor));
-
-  if (media_info) {
-    GError *err = NULL;
-    GstMediaDescriptorParser *parser = gst_media_descriptor_parser_new (runner,
-        media_info, &err);
-
-    if (parser == NULL) {
-      GST_ERROR ("Could not use %s as a media-info file (error: %s)",
-          media_info, err ? err->message : "Unknown error");
-
-      g_free (media_info);
-      exit (1);
-    }
-
-    gst_validate_monitor_set_media_descriptor (monitor,
-        GST_MEDIA_DESCRIPTOR (parser));
-    gst_object_unref (parser);
-    g_free (media_info);
-  }
-
-  mainloop = g_main_loop_new (NULL, FALSE);
-  bus = gst_element_get_bus (pipeline);
-  gst_bus_add_signal_watch (bus);
-  g_signal_connect (bus, "message", (GCallback) bus_callback, mainloop);
-
-  g_print ("Starting pipeline\n");
-  g_object_get (monitor, "handles-states", &monitor_handles_state, NULL);
-  if (monitor_handles_state == FALSE) {
-    sret = gst_element_set_state (pipeline, GST_STATE_PLAYING);
-    switch (sret) {
-      case GST_STATE_CHANGE_FAILURE:
-        /* ignore, we should get an error message posted on the bus */
-        g_print ("Pipeline failed to go to PLAYING state\n");
-        gst_element_set_state (pipeline, GST_STATE_NULL);
-        ret = -1;
-        goto exit;
-      case GST_STATE_CHANGE_NO_PREROLL:
-        g_print ("Pipeline is live.\n");
-        is_live = TRUE;
-        break;
-      case GST_STATE_CHANGE_ASYNC:
-        g_print ("Prerolling...\r");
-        break;
-      default:
-        break;
-    }
-    g_print ("Pipeline started\n");
-  } else {
-    g_print ("Letting scenario handle set state\n");
-  }
-
-  g_main_loop_run (mainloop);
-  gst_element_set_state (pipeline, GST_STATE_NULL);
-  gst_element_get_state (pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
-
-  /* Clean the bus */
-  gst_bus_set_flushing (bus, TRUE);
-  gst_bus_remove_signal_watch (bus);
-  gst_object_unref (bus);
-
-  rep_err = gst_validate_runner_printf (runner);
-  if (ret == 0) {
-    ret = rep_err;
-    if (rep_err != 0)
-      g_print ("Returning %d as error where found", rep_err);
-  }
-
-exit:
-  g_main_loop_unref (mainloop);
-  g_object_unref (pipeline);
-  g_object_unref (runner);
-  g_object_unref (monitor);
-  g_clear_error (&err);
-#ifdef G_OS_UNIX
-  g_source_remove (signal_watch_id);
-#endif
-  gst_deinit ();
+  ret = g_application_run (G_APPLICATION (validator), argc, argv);
+  if (!ret)
+    ret = gst_validator_get_exit_status (validator);
 
   g_print ("\n=======> Test %s (Return value: %i)\n\n",
       ret == 0 ? "PASSED" : "FAILED", ret);
