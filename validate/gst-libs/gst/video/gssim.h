@@ -28,6 +28,8 @@
 #include <glib-object.h>
 #include <gst/video/video.h>
 
+#include "video-converter.h"
+
 G_BEGIN_DECLS
 
 typedef struct _GssimPriv GssimPriv;

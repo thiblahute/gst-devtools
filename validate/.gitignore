@@ -49,3 +49,4 @@ stamp-h.in
 *tools/gst-validate-launcher
 
 /launcher/config.py
+_inst

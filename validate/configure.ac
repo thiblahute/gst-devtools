@@ -159,7 +159,7 @@ AC_SUBST(GST_PBUTILS_LIBS)
 AC_SUBST(GST_PBUTILS_CFLAGS)
 
 dnl check for gstreamer-video
-PKG_CHECK_MODULES(GST_VIDEO, gstreamer-video-$GST_API_VERSION >= 1.4, HAVE_GST_VIDEO="yes", HAVE_GST_VIDEO="no")
+PKG_CHECK_MODULES(GST_VIDEO, gstreamer-video-$GST_API_VERSION, HAVE_GST_VIDEO="yes", HAVE_GST_VIDEO="no")
 if test "x$HAVE_GST_VIDEO" != "xyes"; then
   AC_ERROR([gst-video is required])
 fi
@@ -197,6 +197,9 @@ dnl checks for gstreamer
 
 AG_GST_CHECK_GST_CHECK($GST_API_VERSION, [$GST_REQ], no)
 AM_CONDITIONAL(HAVE_GST_CHECK, test "x$HAVE_GST_CHECK" = "xyes")
+
+ORC_CHECK([0.4.23])
+
 
 dnl *** set variables based on configure arguments ***
 
@@ -346,3 +349,5 @@ Configuration
 
 gst-validate configured. Type 'make' to build.
 "
+
+ORC_OUTPUT

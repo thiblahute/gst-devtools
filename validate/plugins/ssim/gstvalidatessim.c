@@ -112,6 +112,7 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 
+#include "../../gst-libs/gst/video/video-converter.h"
 #include "../../gst-libs/gst/video/gstvalidatessim.h"
 #include "../../gst/validate/gst-validate-report.h"
 #include "../../gst/validate/gst-validate-pad-monitor.h"
