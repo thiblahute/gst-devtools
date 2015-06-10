@@ -299,6 +299,13 @@ validate_ssim_override_new (GstStructure * config)
     }
   }
 
+  if (gst_structure_has_field (config, "webkit-save")) {
+    g_setenv ("WEBKIT_SURFACE_SAVE_SINK", self->priv->outdir, TRUE);
+    GST_ERROR ("Letting webkit save images");
+  }
+
+
+
 
   self->priv->config = gst_structure_copy (config);
   self->priv->result_outdir =

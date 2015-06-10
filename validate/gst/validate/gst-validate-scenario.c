@@ -934,7 +934,7 @@ _add_execute_actions_gsource (GstValidateScenario * scenario)
   if (priv->execute_actions_source_id == 0 && priv->wait_id == 0
       && priv->signal_handler_id == 0 && priv->message_type == NULL) {
     priv->execute_actions_source_id =
-        g_idle_add ((GSourceFunc) execute_next_action, scenario);
+        g_timeout_add (100, (GSourceFunc) execute_next_action, scenario);
     SCENARIO_UNLOCK (scenario);
 
     GST_DEBUG_OBJECT (scenario, "Start checking position again");
@@ -1461,10 +1461,6 @@ execute_next_action (GstValidateScenario * scenario)
   } else {
     GST_DEBUG_OBJECT (scenario, "Remove source, waiting for action"
         " to be done.");
-
-    SCENARIO_LOCK (scenario);
-    priv->execute_actions_source_id = 0;
-    SCENARIO_UNLOCK (scenario);
 
     return G_SOURCE_CONTINUE;
   }
