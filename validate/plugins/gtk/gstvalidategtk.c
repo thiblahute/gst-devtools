@@ -207,8 +207,6 @@ _find_widget_cb (GtkWidget * child, WidgetNameWidget * res)
     if (res->widget_paths[res->current_index] == NULL) {
       res->widget = child;
       res->found = TRUE;
-      GST_ERROR ("%p GOT IT!!! %s", child,
-          gtk_buildable_get_name (GTK_BUILDABLE (child)));
     } else if (GTK_CONTAINER (child)) {
       res->widget = _find_widget (GTK_CONTAINER (child), res);
     }
@@ -340,8 +338,10 @@ get_window (GstValidateScenario * scenario, GstValidateAction * action,
 
     widget = _find_widget (tmptoplevel->data, &wn);
     if (widget) {
+      /* Copied from gdk testing utils */
       if (GTK_IS_TOOL_BUTTON (widget)) {
-        GST_ERROR ("IS TOOL BUTTON");
+        GST_INFO_OBJECT (scenario, "Widget %s is tool button,"
+            " getting the actual button", widget_name);
         gtk_container_forall (GTK_CONTAINER (widget),
             (GtkCallback) _find_button, &widget);
       }
@@ -376,13 +376,123 @@ _put_events (GstValidateAction * action, GList * events)
   return GST_VALIDATE_EXECUTE_ACTION_ASYNC;
 }
 
+static GstValidateActionReturn
+_execute_key_events (GstValidateScenario * scenario, GstValidateAction * action,
+    GdkEventType etype, GdkWindow * window)
+{
+  GList *events = NULL;
+  const gchar *keys, *string;
+
+  keys = gst_structure_get_string (action->structure, "keys");
+  string = gst_structure_get_string (action->structure, "string");
+  if (keys || string) {
+    events = _create_keyboard_events (action, window, keys, string, etype);
+
+    return _put_events (action, events);
+  }
+
+  return -1;
+}
+
+static GdkEvent *
+_create_button_event (GdkWindow * window, GdkEventType etype, gint modifiers,
+    gint button, GdkDevice * device, gdouble x, gdouble y)
+{
+  GdkEvent *event = gdk_event_new (etype);
+  GdkEventButton *bevent = (GdkEventButton *) event;
+
+  bevent->window = g_object_ref (window);
+  bevent->send_event = TRUE;
+  bevent->time = GDK_CURRENT_TIME;
+  bevent->button = button;
+  bevent->state = modifiers;
+  bevent->x = x;
+  bevent->y = y;
+
+  gdk_event_set_device (event, device);
+
+  return event;
+}
+
+static GList *
+_create_button_events (GstValidateAction * action,
+    GdkWindow * window, GdkEventType etype, gint button,
+    GdkModifierType modifiers, gdouble x, gdouble y)
+{
+  GList *res = NULL;
+  GdkDevice *device = NULL;
+
+  device = get_device (action, GDK_SOURCE_KEYBOARD);
+  if (device == NULL) {
+    GST_VALIDATE_REPORT (action->scenario,
+        g_quark_from_static_string ("scenario::execution-error"),
+        "Could not find a keyboard device");
+
+    return NULL;
+  }
+
+  if (etype == GDK_NOTHING) {
+    res = g_list_append (res,
+        _create_button_event (window, GDK_BUTTON_PRESS,
+            modifiers, button, device, x, y));
+
+    res = g_list_append (res,
+        _create_button_event (window, GDK_BUTTON_RELEASE,
+            modifiers, button, device, x, y));
+  }
+
+  return res;
+}
+
+static GstValidateActionReturn
+_execute_button_events (GstValidateScenario * scenario,
+    GstValidateAction * action, GdkEventType etype, GdkWindow * window)
+{
+  gint button = 1;
+  gboolean handled = FALSE;
+  GList *events = NULL;
+  gint modifiers = 0;
+  gdouble x = 0, y = 0;
+
+  if (gst_structure_get_int (action->structure, "button", &button))
+    handled = TRUE;
+
+  if (!gst_structure_get_int (action->structure, "modifiers", &modifiers)) {
+    const gchar *modifiers_str = gst_structure_get_string (action->structure,
+        "modifiers");
+
+    if (modifiers_str) {
+      modifiers = gdk_keyval_from_name (modifiers_str);
+
+      if (modifiers == GDK_KEY_VoidSymbol) {
+        GST_ERROR_OBJECT (scenario, "Modifier: %s no valid!", modifiers_str);
+      }
+    }
+  }
+
+  if (handled || (etype == GDK_BUTTON_PRESS ||
+          etype == GDK_2BUTTON_PRESS ||
+          etype == GDK_BUTTON_PRESS ||
+          etype == GDK_DOUBLE_BUTTON_PRESS ||
+          etype == GDK_3BUTTON_PRESS || etype == GDK_BUTTON_RELEASE)) {
+    gst_structure_get_double (action->structure, "x", &x);
+    gst_structure_get_double (action->structure, "y", &y);
+
+    events =
+        _create_button_events (action, window, etype, button, modifiers, x, y);
+
+    return _put_events (action, events);
+  }
+
+  return -1;
+}
+
 static gboolean
 _execute_put_events (GstValidateScenario * scenario, GstValidateAction * action)
 {
   GdkEventType etype;
-  const gchar *keys, *string;
+  gint res;
 
-  GList *events = NULL;
   GdkWindow *window = get_window (scenario, action, NULL);
 
   if (!window)
@@ -392,13 +502,11 @@ _execute_put_events (GstValidateScenario * scenario, GstValidateAction * action)
   if (etype == -2)
     return GST_VALIDATE_EXECUTE_ACTION_ERROR_REPORTED;
 
-  keys = gst_structure_get_string (action->structure, "keys");
-  string = gst_structure_get_string (action->structure, "string");
-  if (keys || string) {
-    events = _create_keyboard_events (action, window, keys, string, etype);
+  if ((res = _execute_key_events (scenario, action, etype, window)) > 0)
+    return res;
 
-    return _put_events (action, events);
-  }
+  if ((res = _execute_button_events (scenario, action, etype, window)) > 0)
+    return res;
 
   GST_VALIDATE_REPORT (scenario,
       g_quark_from_static_string ("scenario::execution-error"),
@@ -432,7 +540,18 @@ _process_event (GdkEvent * event, gpointer data)
             action = tmp_action;
           }
           break;
+        case GDK_BUTTON_PRESS:
+        case GDK_DOUBLE_BUTTON_PRESS:
+        case GDK_3BUTTON_PRESS:
+        case GDK_BUTTON_RELEASE:
+          if (event->button.button == awaited_event->button.button &&
+              event->button.state == awaited_event->button.state) {
+            done_event = awaited_event;
+            action = tmp_action;
+          }
+          break;
         default:
+          GST_ERROR ("Type %d not handled", awaited_event->type);
           g_assert_not_reached ();
       }
     }
