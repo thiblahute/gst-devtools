@@ -49,8 +49,15 @@ get_widget_name (GtkWidget * widget)
     name = gtk_buildable_get_name (GTK_BUILDABLE (widget));
 
   if (!name) {
-    name = gtk_widget_get_name (widget);
+    AtkObject *accessible = gtk_widget_get_accessible (widget);
+
+    if (accessible) {
+      name = atk_object_get_name (accessible);
+    }
   }
+
+  if (!name)
+    name = gtk_widget_get_name (widget);
 
   return name;
 }
@@ -176,6 +183,8 @@ _create_keyboard_events (GstValidateAction * action,
 typedef struct
 {
   gchar **widget_paths;
+  const gchar *widget_label;
+  GType widget_type;
   gint current_index;
   GtkWidget *widget;
   gboolean found;
@@ -185,10 +194,28 @@ static GtkWidget *_find_widget (GtkContainer * container,
     WidgetNameWidget * res);
 
 static gboolean
-_widget_has_name (GtkWidget * widget, gchar * name)
+_widget_matches (GtkWidget * widget, WidgetNameWidget * data)
 {
-  if (g_strcmp0 (get_widget_name (GTK_WIDGET (widget)), name) == 0) {
+  if (data->widget_paths && g_strcmp0 (get_widget_name (GTK_WIDGET (widget)),
+          data->widget_paths[data->current_index]) == 0 &&
+      (!data->widget_type || G_OBJECT_TYPE (widget) == data->widget_type)) {
     return TRUE;
+  }
+
+  if (G_OBJECT_TYPE (widget) == data->widget_type) {
+    if (data->widget_label) {
+      if (g_object_class_find_property (G_OBJECT_GET_CLASS (widget), "label")) {
+        gchar *label;
+
+        g_object_get (widget, "label", &label, NULL);
+        if (g_strcmp0 (label, data->widget_label) == 0) {
+          g_free (label);
+          return TRUE;
+        }
+
+        g_free (label);
+      }
+    }
   }
 
   return FALSE;
@@ -201,10 +228,10 @@ _find_widget_cb (GtkWidget * child, WidgetNameWidget * res)
     return;
   }
 
-  if (_widget_has_name (child, res->widget_paths[res->current_index])) {
+  if (_widget_matches (child, res)) {
     res->current_index++;
 
-    if (res->widget_paths[res->current_index] == NULL) {
+    if (!res->widget_paths || res->widget_paths[res->current_index] == NULL) {
       res->widget = child;
       res->found = TRUE;
     } else if (GTK_CONTAINER (child)) {
@@ -225,11 +252,10 @@ _find_widget (GtkContainer * container, WidgetNameWidget * res)
   if (res->found)
     return res->widget;
 
-  if (_widget_has_name (GTK_WIDGET (container),
-          res->widget_paths[res->current_index])) {
+  if (_widget_matches (GTK_WIDGET (container), res)) {
     res->current_index++;
 
-    if (res->widget_paths[res->current_index] == NULL)
+    if (!res->widget_paths || res->widget_paths[res->current_index] == NULL)
       return GTK_WIDGET (container);
   }
 
@@ -238,7 +264,7 @@ _find_widget (GtkContainer * container, WidgetNameWidget * res)
   if (res->widget) {
     res->current_index++;
 
-    if (res->widget_paths[res->current_index + 1] == NULL)
+    if (!res->widget_paths || res->widget_paths[res->current_index + 1] == NULL)
       return res->widget;
 
     if (GTK_IS_CONTAINER (res->widget))
@@ -260,7 +286,7 @@ _find_button (GtkWidget * widget, GtkWidget ** button)
 static GSList *
 test_find_widget_input_windows (GtkWidget * widget, gboolean input_only)
 {
-  GdkWindow *window;
+  GdkWindow *window, *parent_window;
   GList *node, *children;
   GSList *matches = NULL;
   gpointer udata;
@@ -271,7 +297,12 @@ test_find_widget_input_windows (GtkWidget * widget, gboolean input_only)
   if (udata == widget && (!input_only || (GDK_IS_WINDOW (window)
               && gdk_window_is_input_only (GDK_WINDOW (window)))))
     matches = g_slist_prepend (matches, window);
-  children = gdk_window_get_children (gtk_widget_get_parent_window (widget));
+
+  parent_window = gtk_widget_get_parent_window (widget);
+  if (!parent_window)
+    return g_slist_reverse (matches);
+
+  children = gdk_window_get_children (parent_window);
   for (node = children; node; node = node->next) {
     gdk_window_get_user_data (node->data, &udata);
     if (udata == widget && (!input_only || (GDK_IS_WINDOW (node->data)
@@ -292,6 +323,19 @@ widget_get_window (GtkWidget * widget)
 
   if (iwindows)
     res = iwindows->data;
+  else if (GTK_IS_CONTAINER (widget)) {
+    GList *tmp, *children;;
+
+    children = gtk_container_get_children (GTK_CONTAINER (widget));
+    for (tmp = children; tmp; tmp = tmp->next) {
+      res = widget_get_window (tmp->data);
+      if (res) {
+        g_list_free (children);
+        return res;
+      }
+    }
+    g_list_free (children);
+  }
 
   g_slist_free (iwindows);
 
@@ -305,11 +349,14 @@ get_window (GstValidateScenario * scenario, GstValidateAction * action,
   GList *tmptoplevel;
   GdkWindow *res = NULL;
   gchar **widget_paths = NULL;
+  const gchar *widget_type = NULL, *widget_label;
 
   GList *toplevels = gtk_window_list_toplevels ();
 
   if (!widget_name)
     widget_name = gst_structure_get_string (action->structure, "widget-name");
+  widget_type = gst_structure_get_string (action->structure, "widget-type");
+  widget_label = gst_structure_get_string (action->structure, "widget-label");
 
   if (!toplevels) {
     GST_VALIDATE_REPORT (scenario,
@@ -319,19 +366,23 @@ get_window (GstValidateScenario * scenario, GstValidateAction * action,
     return NULL;
   }
 
-  if (!widget_name) {
+  if (!widget_name && !widget_type) {
     res = gtk_widget_get_window (toplevels->data);
 
     goto done;
   }
 
-  widget_paths = g_strsplit (widget_name, "/", -1);
+  if (widget_name)
+    widget_paths = g_strsplit (widget_name, "/", -1);
 
   for (tmptoplevel = toplevels; tmptoplevel; tmptoplevel = tmptoplevel->next) {
     GtkWidget *widget;
-    WidgetNameWidget wn;
+    WidgetNameWidget wn = { 0, };
 
     wn.widget_paths = widget_paths;
+    if (widget_type)
+      wn.widget_type = g_type_from_name (widget_type);
+    wn.widget_label = widget_label;
     wn.current_index = 0;
     wn.found = FALSE;
     wn.widget = NULL;
@@ -615,6 +666,20 @@ gst_validate_gtk_init (GstPlugin * plugin)
               .description = "The name of the target GdkWidget of the GdkEvent"
                 ". That widget has to contain a GdkWindow. If not specified,"
                 " the event will be sent to the first toplevel window",
+              .mandatory = FALSE,
+              .types = "string",
+              .possible_variables = NULL,
+            },
+            {
+              .name = "widget-type",
+              .description = "The GType of the widget as a string",
+              .mandatory = FALSE,
+              .types = "string",
+              .possible_variables = NULL,
+            },
+            {
+              .name = "widget-label",
+              .description = "The 'label' property of a widget",
               .mandatory = FALSE,
               .types = "string",
               .possible_variables = NULL,
