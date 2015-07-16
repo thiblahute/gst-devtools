@@ -3151,6 +3151,32 @@ gst_validate_scenario_get_actions (GstValidateScenario * scenario)
   return NULL;
 }
 
+/**
+ * gst_validate_action_set_structure:
+ * @action: The #GstValidateAction
+ * @structure: (transfer full): The GstStructure to be used for @action
+ *
+ * Get the action structure
+ *
+ * Returns: (transfer full): A list of #GstValidateAction.
+ */
+
+gboolean
+gst_validate_action_set_structure (GstValidateAction * action,
+    GstStructure * structure)
+{
+  const gchar *name = gst_structure_get_name (structure);
+  GstValidateActionType *type = gst_validate_get_action_type (name);
+
+  g_return_val_if_fail (type, FALSE);
+
+  gst_mini_object_unref (GST_MINI_OBJECT (type));
+  action->structure = structure;
+  action->type = name;
+
+  return TRUE;
+}
+
 void
 init_scenarios (void)
 {

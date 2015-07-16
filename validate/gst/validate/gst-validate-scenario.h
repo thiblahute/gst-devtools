@@ -301,6 +301,9 @@ GstValidateExecuteActionReturn
 gst_validate_execute_action                 (GstValidateActionType * action_type,
                                              GstValidateAction * action);
 
+gboolean
+gst_validate_action_set_structure (GstValidateAction * action, GstStructure *structure);
+
 G_END_DECLS
 
 #endif /* __GST_VALIDATE_SCENARIOS__ */
