@@ -1290,6 +1290,7 @@ _execute_sub_action_action (GstValidateAction * action)
       GST_VALIDATE_REPORT (action->scenario, SCENARIO_FILE_MALFORMED,
           "Sub action %s could not be parsed", subaction_str);
 
+      action->priv->executing_last_subaction = TRUE;
       res = GST_VALIDATE_EXECUTE_ACTION_ERROR;
       goto done;
     }

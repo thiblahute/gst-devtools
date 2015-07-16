@@ -684,6 +684,18 @@ gst_validate_gtk_init (GstPlugin * plugin)
               .types = "string",
               .possible_variables = NULL,
             },
+            {
+              .name = "button",
+              .description = "The button to simlulate a click on "
+                  "(as defined by GDK_BUTTON_[PRIMARY, MIDDLE, SECONDARY])."
+                  " Note that if only providing a button, without specifying"
+                  " if press or release as a event type, it will generate a"
+                  " 'click' (button-press + button-release event).",
+              .mandatory = FALSE,
+              .types = "int",
+              .possible_variables = NULL,
+              .def = "1",
+            },
             {NULL}
           }),
       "Put a GdkEvent on the event list using gdk_put_event",
