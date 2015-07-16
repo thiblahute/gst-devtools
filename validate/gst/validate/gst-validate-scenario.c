@@ -1147,6 +1147,7 @@ gst_validate_execute_action (GstValidateActionType * action_type,
 
   gst_validate_print_action (action, NULL);
 
+  action->priv->state = GST_VALIDATE_EXECUTE_ACTION_EXECUTING;
   res = action_type->execute (action->scenario, action);
 
   if (!gst_structure_has_field (action->structure, "sub-action")) {
