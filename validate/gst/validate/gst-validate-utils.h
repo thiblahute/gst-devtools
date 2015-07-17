@@ -23,11 +23,12 @@
 #ifndef EXPRESSION_PARSER_H
 #define EXPRESSION_PARSER_H
 
-#include<setjmp.h>
-#include<stdlib.h>
-#include<glib.h>
-#include<gio/gio.h>
+#include <setjmp.h>
+#include <stdlib.h>
+#include <glib.h>
+#include <gio/gio.h>
 #include <gst/gst.h>
+#include <gst-validate-internal.h>
 
 typedef int (*ParseVariableFunc) (const gchar *name,
     double *value, gpointer user_data);
@@ -41,8 +42,12 @@ gboolean gst_validate_utils_enum_from_str   (GType type,
                                              const gchar * str_enum,
                                              guint * enum_value);
 
-GList * gst_validate_utils_structs_parse_from_filename         (const gchar * scenario_file);
-GList * structs_parse_from_gfile            (GFile * scenario_file);
+GList * gst_validate_utils_parse_file_full  (const gchar * filename,
+                                             ParseVariablesFunc parse_func,
+                                             gpointer udata);
+
+GList *
+gst_validate_utils_structs_parse_from_filename (const gchar * scenario_file);
 
 gboolean gst_validate_element_has_klass (GstElement * element, const gchar * klass);
 gboolean gst_validate_utils_get_clocktime (GstStructure *structure, const gchar * name,

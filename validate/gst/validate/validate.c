@@ -95,11 +95,19 @@ static GList *
 create_config (const gchar * path, const gchar * suffix)
 {
   GList *structures = NULL, *tmp, *result = NULL;
+  gchar *dirname = NULL;
 
   if (!suffix)
     return NULL;
 
-  structures = gst_validate_utils_structs_parse_from_filename (path);
+  dirname = g_path_get_dirname (path);
+  g_setenv ("CONFIG_DIRNAME", dirname, TRUE);
+  g_free (dirname);
+  structures =
+      gst_validate_utils_parse_file_full (path,
+      (ParseVariablesFunc) gst_validate_utils_substitue_envvars,
+      (gpointer) path);
+  g_unsetenv ("CONFIG_DIRNAME");
 
   for (tmp = structures; tmp; tmp = tmp->next) {
     GstStructure *structure = tmp->data;

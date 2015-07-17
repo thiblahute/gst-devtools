@@ -2182,10 +2182,16 @@ _load_scenario_file (GstValidateScenario * scenario,
   gboolean ret = TRUE;
   GList *structures, *tmp;
   GstValidateScenarioPrivate *priv = scenario->priv;
+  gchar *dirname = g_path_get_dirname (scenario_file);
 
   *is_config = FALSE;
 
-  structures = gst_validate_utils_structs_parse_from_filename (scenario_file);
+  g_setenv ("SCENARIO_DIRNAME", dirname, TRUE);
+  structures = gst_validate_utils_parse_file_full (scenario_file,
+      (ParseVariablesFunc) gst_validate_utils_substitue_envvars, NULL);
+  g_unsetenv ("SCENARIO_DIRNAME");
+  g_free (dirname);
+
   if (structures == NULL)
     goto failed;
 
@@ -2724,7 +2730,6 @@ _add_description (GQuark field_id, const GValue * value, KeyFileGroupName * kfg)
   return TRUE;
 }
 
-
 static gboolean
 _parse_scenario (GFile * f, GKeyFile * kf)
 {
@@ -2736,7 +2741,15 @@ _parse_scenario (GFile * f, GKeyFile * kf)
     GstStructure *desc = NULL;
 
     gchar **name = g_strsplit (fname, GST_VALIDATE_SCENARIO_SUFFIX, 0);
-    GList *tmp, *structures = structs_parse_from_gfile (f);
+    gchar *path = g_file_get_path (f), *dirname = g_path_get_dirname (fname);
+    GList *tmp, *structures;
+
+    g_setenv ("SCENARIO_DIRNAME", dirname, TRUE);
+    structures = structs_parse_from_gfile (f,
+        (ParseVariablesFunc) gst_validate_utils_substitue_envvars, path);
+    g_unsetenv ("SCENARIO_DIRNAME");
+    g_free (path);
+    g_free (dirname);
 
     for (tmp = structures; tmp; tmp = tmp->next) {
       GstValidateActionType *type =
@@ -3574,5 +3587,4 @@ init_scenarios (void)
       "Disables a GstPlugin",
       GST_VALIDATE_ACTION_TYPE_NONE);
   /*  *INDENT-ON* */
-
 }

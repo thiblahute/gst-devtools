@@ -23,13 +23,15 @@
 #define __GST_VALIDATE_INTERNAL_H__
 
 #include <gst/gst.h>
+#include <gio/gio.h>
+
 #include "gst-validate-scenario.h"
 
 GST_DEBUG_CATEGORY_EXTERN (gstvalidate_debug);
 #define GST_CAT_DEFAULT gstvalidate_debug
 
 extern GRegex *newline_regex;
-
+typedef gchar * (*ParseVariablesFunc) (const gchar * string, gpointer udata);
 
 /* If an action type is 1 (TRUE) we also concider it is a config to keep backward compatibility */
 #define IS_CONFIG_ACTION_TYPE(type) (((type) & GST_VALIDATE_ACTION_TYPE_CONFIG) || ((type) == TRUE))
@@ -41,8 +43,17 @@ void init_scenarios (void);
 /* FIXME 2.0 Remove that as this is only for backward compatibility
  * as we used to have to print actions in the action execution function
  * and this is done by the scenario itself now */
-GST_EXPORT gboolean _action_check_and_set_printed (GstValidateAction *action);
+GST_EXPORT gboolean _action_check_and_set_printed    (GstValidateAction *action);
 GST_EXPORT gboolean gst_validate_action_is_subaction (GstValidateAction *action);
-void _priv_validate_override_registry_deinit (void);
+void _priv_validate_override_registry_deinit         (void);
+
+G_GNUC_INTERNAL
+gchar * gst_validate_utils_substitue_envvars         (const gchar * string, gpointer udata);
+
+G_GNUC_INTERNAL
+GList * structs_parse_from_gfile                     (GFile * scenario_file,
+                                                      ParseVariablesFunc parse_func,
+                                                      gpointer udata);
+
 
 #endif

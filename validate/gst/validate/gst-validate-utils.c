@@ -20,13 +20,14 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#include<math.h>
-#include<ctype.h>
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
+#include <math.h>
+#include <ctype.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
 #include "gst-validate-utils.h"
+#include "gst-validate-internal.h"
 #include <gst/gst.h>
 
 #define PARSER_BOOLEAN_EQUALITY_THRESHOLD (1e-10)
@@ -526,12 +527,13 @@ gst_validate_utils_enum_from_str (GType type, const gchar * str_enum,
 
 /* Parse file that contains a list of GStructures */
 static gchar **
-_file_get_lines (GFile * file)
+_file_get_lines (GFile * file, ParseVariablesFunc parse_func, gpointer udata)
 {
+  gint i;
   gsize size;
 
   GError *err = NULL;
-  gchar *content = NULL, *escaped_content = NULL, **lines = NULL;
+  gchar *content = NULL, *escaped_content = NULL, **lines = NULL, *tmp;
 
   /* TODO Handle GCancellable */
   if (!g_file_load_contents (file, NULL, &content, &size, NULL, &err)) {
@@ -555,11 +557,24 @@ _file_get_lines (GFile * file)
   lines = g_strsplit (escaped_content, "\n", 0);
   g_free (escaped_content);
 
+  if (!lines)
+    return NULL;
+
+  if (parse_func) {
+    for (i = 0; lines[i]; i++) {
+      tmp = lines[i];
+
+      lines[i] = parse_func (lines[i], udata);
+      g_free (tmp);
+    }
+  }
+
   return lines;
 }
 
 static gchar **
-_get_lines (const gchar * scenario_file)
+_get_lines (const gchar * scenario_file,
+    ParseVariablesFunc parse_func, gpointer udata)
 {
   GFile *file = NULL;
   gchar **lines = NULL;
@@ -570,7 +585,7 @@ _get_lines (const gchar * scenario_file)
     return NULL;
   }
 
-  lines = _file_get_lines (file);
+  lines = _file_get_lines (file, parse_func, udata);
 
   g_object_unref (file);
 
@@ -614,14 +629,14 @@ failed:
 }
 
 GList *
-gst_validate_utils_structs_parse_from_filename (const gchar * scenario_file)
+gst_validate_utils_parse_file_full (const gchar * file,
+    ParseVariablesFunc parse_func, gpointer udata)
 {
   gchar **lines;
 
-  lines = _get_lines (scenario_file);
-
+  lines = _get_lines (file, parse_func, udata);
   if (lines == NULL) {
-    GST_DEBUG ("Got no line for file: %s", scenario_file);
+    GST_DEBUG ("Got no line for file: %s", file);
     return NULL;
   }
 
@@ -629,11 +644,18 @@ gst_validate_utils_structs_parse_from_filename (const gchar * scenario_file)
 }
 
 GList *
-structs_parse_from_gfile (GFile * scenario_file)
+gst_validate_utils_structs_parse_from_filename (const gchar * file)
+{
+  return gst_validate_utils_parse_file_full (file, NULL, NULL);
+}
+
+GList *
+structs_parse_from_gfile (GFile * scenario_file,
+    ParseVariablesFunc parse_func, gpointer udata)
 {
   gchar **lines;
 
-  lines = _file_get_lines (scenario_file);
+  lines = _file_get_lines (scenario_file, NULL, NULL);
 
   if (lines == NULL)
     return NULL;
@@ -733,4 +755,59 @@ gst_validate_utils_get_clocktime (GstStructure * structure, const gchar * name,
   }
 
   return TRUE;
+}
+
+gchar *
+gst_validate_utils_substitue_envvars (const gchar * string, gpointer udata)
+{
+  gint i;
+  gboolean check = FALSE;
+  gchar *res, *tmp;
+  GRegex *regex = NULL;
+  gchar **all_envs;
+  const gchar *it;
+
+
+  it = string;
+  while (*it) {
+    if (*it == '$') {
+      check = TRUE;
+      break;
+    }
+    it++;
+  }
+
+  if (!check)
+    return g_strdup (string);
+
+  if (!string)
+    return NULL;
+
+  all_envs = g_get_environ ();
+  res = g_strdup (string);
+  for (i = 0; all_envs[i]; i++) {
+    gchar **var_value = g_strsplit (all_envs[i], "=", -1);
+    gchar *varname;
+
+    if (!var_value[1]) {
+      g_strfreev (var_value);
+      continue;
+    }
+
+    varname = g_strdup_printf ("\\$%s", var_value[0]);
+    tmp = res;
+
+    regex = g_regex_new (varname, 0, 0, NULL);
+    res = g_regex_replace (regex, res, -1, 0, var_value[1], 0, NULL);
+
+    g_regex_unref (regex);
+    g_free (varname);
+    g_free (tmp);
+    g_strfreev (var_value);
+
+  }
+
+  g_strfreev (all_envs);
+
+  return res;
 }
