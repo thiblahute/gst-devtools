@@ -412,6 +412,8 @@ static GstValidateActionReturn
 _put_events (GstValidateAction * action, GList * events)
 {
   GList *tmp;
+  gboolean block = FALSE;
+  GMainContext *ctx;
 
   if (events == NULL)
     return GST_VALIDATE_EXECUTE_ACTION_ERROR_REPORTED;
@@ -419,12 +421,24 @@ _put_events (GstValidateAction * action, GList * events)
   gst_mini_object_set_qdata (GST_MINI_OBJECT (action), ACTION_GDKEVENTS_QUARK,
       events, NULL);
   awaited_actions = g_list_append (awaited_actions, action);
+  gst_structure_get_boolean (action->structure, "block", &block);
 
   for (tmp = events; tmp; tmp = tmp->next) {
     gdk_event_put (tmp->data);
   }
 
-  return GST_VALIDATE_EXECUTE_ACTION_ASYNC;
+  if (!block)
+    return GST_VALIDATE_EXECUTE_ACTION_ASYNC;
+
+  ctx = g_main_context_default ();
+  while (events) {
+    g_main_context_iteration (ctx, TRUE);
+
+    events = ((GList *) gst_mini_object_get_qdata (GST_MINI_OBJECT (action),
+            ACTION_GDKEVENTS_QUARK));
+  }
+
+  return GST_VALIDATE_EXECUTE_ACTION_OK;
 }
 
 static GstValidateActionReturn
@@ -695,6 +709,14 @@ gst_validate_gtk_init (GstPlugin * plugin)
               .types = "int",
               .possible_variables = NULL,
               .def = "1",
+            },
+            {
+              .name = "block",
+              .description = "Blocks while the event is being processed by Gtk",
+              .mandatory = FALSE,
+              .types = "boolean",
+              .possible_variables = NULL,
+              .def = "false",
             },
             {NULL}
           }),
