@@ -119,11 +119,16 @@
 #include "../../gst/validate/validate.h"
 #include "../../gst/validate/gst-validate-scenario.h"
 #include "../../gst/validate/gst-validate-utils.h"
+#include "../../gst/validate/gst-validate-plugin.h"
 
 #define SSIM_WRONG_FORMAT g_quark_from_static_string ("validatessim::wrong-format")
+#define SSIM_CONFIG_UNUSED g_quark_from_static_string ("validatessim::unused")
 #define SSIM_CONVERSION_ERROR g_quark_from_static_string ("validatessim::conversion-error")
 #define SSIM_SAVING_ERROR g_quark_from_static_string ("validatessim::saving-error")
 #define MONITOR_DATA g_quark_from_static_string ("validate-ssim-monitor-data")
+
+GST_DEBUG_CATEGORY (gstvalidatessim_debug);
+#define GST_CAT_DEFAULT gstvalidatessim_debug
 
 typedef struct _ValidateSsimOverridePriv ValidateSsimOverridePriv;
 
@@ -194,11 +199,10 @@ struct _ValidateSsimOverridePriv
 };
 
 static void
-runner_stopping (GstValidateRunner * runner, ValidateSsimOverride * self)
+_ssim_override_stop (ValidateSsimOverride * self, GstValidateRunner * runner)
 {
-  GstValidateSsim *ssim;
-
   guint i, nfiles;
+  GstValidateSsim *ssim;
   gfloat mssim = 0, lowest = 1, highest = -1, total_avg = 0;
   gint npassed = 0, nfailures = 0;
   gdouble min_avg_similarity = 0.95, min_lowest_similarity = -1.0,
@@ -206,6 +210,18 @@ runner_stopping (GstValidateRunner * runner, ValidateSsimOverride * self)
   const gchar *compared_files_dir =
       gst_structure_get_string (self->priv->config,
       "reference-images-dir");
+
+  if (!self->priv->is_attached) {
+    gchar *config = gst_structure_to_string (self->priv->config);
+
+    gst_validate_reporter_set_runner (GST_VALIDATE_REPORTER (self), runner);
+    GST_VALIDATE_REPORT (self, SSIM_CONFIG_UNUSED,
+        "Validate ssim config %s was not used", config);
+
+    g_free (config);
+    return;
+  }
+
 
   if (!compared_files_dir) {
     return;
@@ -264,14 +280,27 @@ runner_stopping (GstValidateRunner * runner, ValidateSsimOverride * self)
 }
 
 static void
+ssim_stop (GstPlugin * plugin, GstValidateRunner * runner, gpointer udata)
+{
+  GList *tmp, *configs = gst_validate_plugin_get_config (plugin);
+
+  for (tmp = configs; tmp; tmp = tmp->next) {
+    ValidateSsimOverride *o;
+    if (gst_structure_get (tmp->data, "gstvalidate-ssim-override",
+            VALIDATE_SSIM_OVERRIDE_TYPE, &o, NULL)) {
+      _ssim_override_stop (o, runner);
+    }
+  }
+}
+
+static void
 _runner_set (GObject * object, GParamSpec * pspec, gpointer user_data)
 {
   ValidateSsimOverride *self = VALIDATE_SSIM_OVERRIDE (object);
 
   self->priv->is_attached = TRUE;
 
-  g_signal_connect (gst_validate_reporter_get_runner (GST_VALIDATE_REPORTER
-          (self)), "stopping", G_CALLBACK (runner_stopping), self);
+  gst_structure_get_string (self->priv->config, "reference-images-dir");
 }
 
 static ValidateSsimOverride *
@@ -303,7 +332,7 @@ validate_ssim_override_new (GstStructure * config)
   gst_validate_printf (self, "Using %s as output directory\n",
       self->priv->outdir);
 
-  self->priv->config = gst_structure_copy (config);
+  self->priv->config = config;
   self->priv->result_outdir =
       g_strdup (gst_structure_get_string (config, "result-output-dir"));
 
@@ -343,6 +372,8 @@ validate_ssim_override_new (GstStructure * config)
 
   gst_validate_utils_get_clocktime (config, "check-recurrence",
       &self->priv->recurrence);
+  gst_structure_set (config, "gstvalidate-ssim-override",
+      VALIDATE_SSIM_OVERRIDE_TYPE, self, NULL);
 
   g_signal_connect (self, "notify::validate-runner", G_CALLBACK (_runner_set),
       NULL);
@@ -412,9 +443,6 @@ _finalize (GObject * object)
   g_free (priv->outdir);
   g_free (priv->result_outdir);
   g_array_unref (priv->frames);
-
-  if (priv->config)
-    gst_structure_free (priv->config);
 }
 
 static void
@@ -445,6 +473,12 @@ validate_ssim_override_class_init (ValidateSsimOverrideClass * klass)
   gst_validate_issue_register (gst_validate_issue_new (SSIM_SAVING_ERROR,
           "The ValidateSSim plugin could not save PNG file",
           "The ValidateSSim plugin could not save PNG file",
+          GST_VALIDATE_REPORT_LEVEL_CRITICAL));
+
+  gst_validate_issue_register (gst_validate_issue_new (SSIM_CONFIG_UNUSED,
+          "A config for ssim was not used",
+          "Each 'configs' should be used, meaning that it should lead"
+          " to the creation of an override that get attached to a GstElement",
           GST_VALIDATE_REPORT_LEVEL_CRITICAL));
 
   g_type_class_add_private (klass, sizeof (ValidateSsimOverridePriv));
@@ -735,8 +769,13 @@ gst_validate_ssim_init (GstPlugin * plugin)
   GList *tmp, *config;
   GstStructure *config_structure = NULL;
 
+  GST_DEBUG_CATEGORY_INIT (gstvalidatessim_debug, "validatessim", 0,
+      "Validation SSIM plugin");
+
   if (!gst_validate_is_initialized ())
     return FALSE;
+
+  gst_validate_plugin_set_exit_function (plugin, ssim_stop, NULL);
 
   config = gst_validate_plugin_get_config (plugin);
   for (tmp = config; tmp; tmp = tmp->next) {
