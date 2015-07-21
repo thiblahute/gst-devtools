@@ -54,6 +54,8 @@ G_GNUC_INTERNAL
 GList * structs_parse_from_gfile                     (GFile * scenario_file,
                                                       GstValidateParseVariablesFunc parse_func,
                                                       gpointer udata);
-
-
+G_GNUC_INTERNAL
+GstRegistry * gst_validate_registry_get              (void);
+G_GNUC_INTERNAL
+void gst_validate_plugins_exit_runner                (GstValidateRunner *runner);
 #endif

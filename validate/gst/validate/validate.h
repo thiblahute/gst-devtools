@@ -14,6 +14,7 @@
 #include <gst/validate/gst-validate-report.h>
 #include <gst/validate/gst-validate-reporter.h>
 #include <gst/validate/gst-validate-media-info.h>
+#include <gst/validate/gst-validate-plugin.h>
 
 void gst_validate_init (void);
 void gst_validate_deinit (void);

@@ -514,6 +514,8 @@ gst_validate_runner_exit (GstValidateRunner * runner, gboolean print_result)
 
   g_signal_emit (runner, _signals[STOPPING_SIGNAL], 0);
 
+  gst_validate_plugins_exit_runner (runner);
+
   if (print_result) {
     ret = gst_validate_runner_printf (runner);
   } else {

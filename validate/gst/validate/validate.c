@@ -67,7 +67,7 @@ DllMain (HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 
 #endif
 
-static GstRegistry *
+GstRegistry *
 gst_validate_registry_get (void)
 {
   GstRegistry *registry;

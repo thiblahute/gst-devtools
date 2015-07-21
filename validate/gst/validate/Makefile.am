@@ -16,6 +16,7 @@ libgstvalidate_@GST_API_VERSION@_la_SOURCES = \
 	media-descriptor-writer.c \
 	media-descriptor-parser.c \
 	gst-validate-media-info.c \
+	gst-validate-plugin.c \
     validate.c
 
 libgstvalidate_@GST_API_VERSION@include_HEADERS = \
@@ -38,6 +39,7 @@ libgstvalidate_@GST_API_VERSION@include_HEADERS = \
 	gst-validate-runner.h \
 	gst-validate-scenario.h \
 	gst-validate-utils.h \
+	gst-validate-plugin.h \
 	gst-validate-media-info.h
 
 noinst_HEADERS = 		\
