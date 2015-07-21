@@ -2188,7 +2188,8 @@ _load_scenario_file (GstValidateScenario * scenario,
 
   g_setenv ("SCENARIO_DIRNAME", dirname, TRUE);
   structures = gst_validate_utils_parse_file_full (scenario_file,
-      (ParseVariablesFunc) gst_validate_utils_substitue_envvars, NULL);
+      (GstValidateParseVariablesFunc) gst_validate_utils_substitue_envvars,
+      NULL);
   g_unsetenv ("SCENARIO_DIRNAME");
   g_free (dirname);
 
@@ -2746,7 +2747,8 @@ _parse_scenario (GFile * f, GKeyFile * kf)
 
     g_setenv ("SCENARIO_DIRNAME", dirname, TRUE);
     structures = structs_parse_from_gfile (f,
-        (ParseVariablesFunc) gst_validate_utils_substitue_envvars, path);
+        (GstValidateParseVariablesFunc) gst_validate_utils_substitue_envvars,
+        path);
     g_unsetenv ("SCENARIO_DIRNAME");
     g_free (path);
     g_free (dirname);

@@ -105,7 +105,7 @@ create_config (const gchar * path, const gchar * suffix)
   g_free (dirname);
   structures =
       gst_validate_utils_parse_file_full (path,
-      (ParseVariablesFunc) gst_validate_utils_substitue_envvars,
+      (GstValidateParseVariablesFunc) gst_validate_utils_substitue_envvars,
       (gpointer) path);
   g_unsetenv ("CONFIG_DIRNAME");
 

@@ -26,12 +26,12 @@
 #include <gio/gio.h>
 
 #include "gst-validate-scenario.h"
+#include "gst-validate-utils.h"
 
 GST_DEBUG_CATEGORY_EXTERN (gstvalidate_debug);
 #define GST_CAT_DEFAULT gstvalidate_debug
 
 extern GRegex *newline_regex;
-typedef gchar * (*ParseVariablesFunc) (const gchar * string, gpointer udata);
 
 /* If an action type is 1 (TRUE) we also concider it is a config to keep backward compatibility */
 #define IS_CONFIG_ACTION_TYPE(type) (((type) & GST_VALIDATE_ACTION_TYPE_CONFIG) || ((type) == TRUE))
@@ -52,7 +52,7 @@ gchar * gst_validate_utils_substitue_envvars         (const gchar * string, gpoi
 
 G_GNUC_INTERNAL
 GList * structs_parse_from_gfile                     (GFile * scenario_file,
-                                                      ParseVariablesFunc parse_func,
+                                                      GstValidateParseVariablesFunc parse_func,
                                                       gpointer udata);
 
 

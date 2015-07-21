@@ -28,13 +28,15 @@
 #include <glib.h>
 #include <gio/gio.h>
 #include <gst/gst.h>
-#include <gst-validate-internal.h>
 
-typedef int (*ParseVariableFunc) (const gchar *name,
+typedef int (*GstValidateParseVariableFunc) (const gchar *name,
     double *value, gpointer user_data);
 
+typedef gchar * (*GstValidateParseVariablesFunc) (const gchar * string, gpointer udata);
+#define ParseVariableFunc GstValidateParseVariablesFunc
+
 gdouble gst_validate_utils_parse_expression (const gchar *expr,
-                                             ParseVariableFunc variable_func,
+                                             GstValidateParseVariableFunc variable_func,
                                              gpointer user_data,
                                              gchar **error);
 guint gst_validate_utils_flags_from_str     (GType type, const gchar * str_flags);
@@ -43,7 +45,7 @@ gboolean gst_validate_utils_enum_from_str   (GType type,
                                              guint * enum_value);
 
 GList * gst_validate_utils_parse_file_full  (const gchar * filename,
-                                             ParseVariablesFunc parse_func,
+                                             GstValidateParseVariablesFunc parse_func,
                                              gpointer udata);
 
 GList *

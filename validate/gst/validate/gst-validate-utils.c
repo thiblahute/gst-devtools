@@ -44,7 +44,7 @@ typedef struct
   jmp_buf err_jmp_buf;
   const gchar *error;
   void *user_data;
-  ParseVariableFunc variable_func;
+  GstValidateParseVariableFunc variable_func;
 } MathParser;
 
 static gdouble _read_power (MathParser * parser);
@@ -299,7 +299,7 @@ _read_boolean_or (MathParser * parser)
 
 static gboolean
 _init (MathParser * parser, const gchar * str,
-    ParseVariableFunc variable_func, void *user_data)
+    GstValidateParseVariableFunc variable_func, void *user_data)
 {
   parser->str = str;
   parser->len = strlen (str) + 1;
@@ -449,7 +449,8 @@ _read_power (MathParser * parser)
 
 gdouble
 gst_validate_utils_parse_expression (const gchar * expr,
-    ParseVariableFunc variable_func, gpointer user_data, gchar ** error)
+    GstValidateParseVariableFunc variable_func, gpointer user_data,
+    gchar ** error)
 {
   gdouble val;
   MathParser parser;
@@ -527,7 +528,8 @@ gst_validate_utils_enum_from_str (GType type, const gchar * str_enum,
 
 /* Parse file that contains a list of GStructures */
 static gchar **
-_file_get_lines (GFile * file, ParseVariablesFunc parse_func, gpointer udata)
+_file_get_lines (GFile * file, GstValidateParseVariablesFunc parse_func,
+    gpointer udata)
 {
   gint i;
   gsize size;
@@ -574,7 +576,7 @@ _file_get_lines (GFile * file, ParseVariablesFunc parse_func, gpointer udata)
 
 static gchar **
 _get_lines (const gchar * scenario_file,
-    ParseVariablesFunc parse_func, gpointer udata)
+    GstValidateParseVariablesFunc parse_func, gpointer udata)
 {
   GFile *file = NULL;
   gchar **lines = NULL;
@@ -630,7 +632,7 @@ failed:
 
 GList *
 gst_validate_utils_parse_file_full (const gchar * file,
-    ParseVariablesFunc parse_func, gpointer udata)
+    GstValidateParseVariablesFunc parse_func, gpointer udata)
 {
   gchar **lines;
 
@@ -651,7 +653,7 @@ gst_validate_utils_structs_parse_from_filename (const gchar * file)
 
 GList *
 structs_parse_from_gfile (GFile * scenario_file,
-    ParseVariablesFunc parse_func, gpointer udata)
+    GstValidateParseVariablesFunc parse_func, gpointer udata)
 {
   gchar **lines;
 
