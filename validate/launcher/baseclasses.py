@@ -134,6 +134,7 @@ class Test(Loggable):
     def open_logfile(self):
         path = os.path.join(self.options.logsdir,
                             self.classname.replace(".", os.sep))
+        print("Making dir:", os.path.dirname(path))
         mkdir(os.path.dirname(path))
         self.logfile = path
 
@@ -1110,6 +1111,9 @@ class _TestsLauncher(Loggable):
         return app_dirs
 
     def _exec_app(self, app_dir, env):
+        if not app_dir:
+            return
+
         try:
             files = os.listdir(app_dir)
         except OSError as e:
@@ -1130,6 +1134,9 @@ class _TestsLauncher(Loggable):
 
         testers = [i() for i in utils.get_subclasses(TestsManager, env)]
         for tester in testers:
+            if not tester.name:
+                continue
+
             if tester.init() is True:
                 self.testers.append(tester)
             else:
@@ -1175,6 +1182,7 @@ class _TestsLauncher(Loggable):
                 if not isinstance(wanted_test_manager, list):
                     wanted_test_manager = [wanted_test_manager]
 
+            print("Going with %s" % self.testers)
             for tester in self.testers:
                 if wanted_test_manager is not None and \
                         tester.name not in wanted_test_manager:
@@ -1187,7 +1195,7 @@ class _TestsLauncher(Loggable):
                     loaded = True
 
             if not loaded:
-                printc("Could not load testsuite: %s"
+                printc("DABOOM Could not load testsuite: %s"
                        " maybe because of missing TestManager"
                        % (testsuite), Colors.FAIL)
 
@@ -1255,10 +1263,10 @@ class _TestsLauncher(Loggable):
             if not self._check_tester_has_other_testsuite(testsuite, tester) \
                     and tester.check_testslist:
                 try:
-                    testlist_file = open(os.path.splitext(testsuite.__file__)[0] + ".testslist",
-                                         'rw')
+                    testlist_filename = os.path.splitext(testsuite.__file__)[0] + ".testslist"
+                    testlist_file = open(testlist_filename, 'rw')
 
-                    know_tests = testlist_file.read().split("\n")
+                    known_tests = testlist_file.read().split("\n")
                     testlist_file.close()
 
                     testlist_file = open(os.path.splitext(testsuite.__file__)[0] + ".testslist",

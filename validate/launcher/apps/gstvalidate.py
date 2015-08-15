@@ -20,6 +20,7 @@ import os
 import copy
 import sys
 import time
+import signal
 import urlparse
 import subprocess
 import ConfigParser
@@ -97,6 +98,10 @@ class GstValidateTranscodingTestsGenerator(GstValidateTestsGenerator):
     def populate_tests(self, uri_minfo_special_scenarios, scenarios):
         for uri, mediainfo, special_scenarios in uri_minfo_special_scenarios:
             if mediainfo.media_descriptor.is_image():
+                continue
+
+            protocol = mediainfo.media_descriptor.get_protocol()
+            if protocol == Protocols.RTSP:
                 continue
 
             for comb in self.test_manager.get_encoding_formats():
@@ -241,6 +246,7 @@ class GstValidatePipelineTestsGenerator(GstValidateTestsGenerator):
 class GstValidatePlaybinTestsGenerator(GstValidatePipelineTestsGenerator):
 
     def __init__(self, test_manager):
+        print("Go go")
         GstValidatePipelineTestsGenerator.__init__(
             self, "playback", test_manager, "playbin")
 
@@ -265,6 +271,9 @@ class GstValidatePlaybinTestsGenerator(GstValidatePipelineTestsGenerator):
         for uri, minfo, special_scenarios in uri_minfo_special_scenarios:
             pipe = self._pipeline_template
             protocol = minfo.media_descriptor.get_protocol()
+
+            if protocol == Protocols.RTSP:
+                continue
 
             pipe += " uri=%s" % uri
 
@@ -535,28 +544,27 @@ class GstValidateRTSPTest(GstValidateLaunchTest):
                  local_uri, timeout=DEFAULT_TIMEOUT, scenario=None,
                  media_descriptor=None):
         self._local_uri = local_uri
+        self.rtsp_server = None
         super(GstValidateRTSPTest, self).__init__(classname, options,
                                                   reporter, pipeline_desc,
                                                   timeout, scenario, media_descriptor)
 
-    def run(self):
-        res = 0
+    def test_start(self, queue):
         command = RTSP_SERVER_COMMAND + " " + self._local_uri
-        rtsp_server = subprocess.Popen("exec " + command,
-                                       stderr=self.reporter.out,
-                                       stdout=self.reporter.out,
-                                       shell=True)
+        self.open_logfile()
+        rtspserver_logs = open(self.logfile + '_rtspserver.log', 'w+')
+        self.extra_logfiles.append(rtspserver_logs.name)
+        self.rtsp_server = subprocess.Popen("exec " + command,
+                                            stderr=rtspserver_logs,
+                                            stdout=rtspserver_logs,
+                                            shell=True)
 
-        try:
-            res = super(GstValidateRTSPTest, self).run()
-        except KeyboardInterrupt:
-            rtsp_server.send_signal(signal.SIGINT)
-            raise
+        return super(GstValidateRTSPTest, self).test_start(queue)
 
-        try:
-            rtsp_server.send_signal(signal.SIGINT)
-        except OSError:
-            pass
+    def process_update(self):
+        res = super(GstValidateRTSPTest, self).process_update()
+        if res:
+            self.rtsp_server.send_signal(signal.SIGINT)
 
         return res
 
@@ -602,13 +610,12 @@ class GstValidateRTSPTestGenerator(GstValidatePlaybinTestsGenerator):
             if minfo.media_descriptor.is_image():
                 continue
 
-            old = minfo
             minfo = copy.deepcopy(minfo)
             minfo.media_descriptor = GstValidateRTSPMediaDesciptor(
                 minfo.media_descriptor.get_path())
 
             for scenario in scenarios:
-                if scenario.seeks() or not minfo.media_descriptor.is_compatible(scenario):
+                if "set_state" in scenario.name or not minfo.media_descriptor.is_compatible(scenario):
                     continue
 
                 cpipe = self._set_sinks(minfo, "%s uri=rtsp://127.0.0.1:8554/test"
@@ -702,6 +709,8 @@ not been tested and explicitely activated if you set use --wanted-tests ALL""")
 
         for generator in self.get_generators():
             for test in generator.generate_tests(uris, scenarios):
+                if "rtsp" in test.classname:
+                    print("---> generator is %s" % generator)
                 self.add_test(test)
 
         return self.tests
@@ -951,6 +960,7 @@ not been tested and explicitely activated if you set use --wanted-tests ALL""")
 
         self.add_generators([GstValidatePlaybinTestsGenerator(self),
                              GstValidateMediaCheckTestsGenerator(self),
+                             GstValidateRTSPTestGenerator(self),
                              GstValidateTranscodingTestsGenerator(self)])
         self._default_generators_registers = True
 
