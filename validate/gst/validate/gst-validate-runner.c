@@ -28,6 +28,7 @@
 #  include "config.h"
 #endif
 
+#include "validate.h"
 #include "gst-validate-internal.h"
 #include "gst-validate-report.h"
 #include "gst-validate-monitor-factory.h"
@@ -92,7 +93,7 @@ typedef struct _PatternLevel
   } G_STMT_END
 
 #define gst_validate_runner_parent_class parent_class
-G_DEFINE_TYPE (GstValidateRunner, gst_validate_runner, G_TYPE_OBJECT);
+G_DEFINE_TYPE (GstValidateRunner, gst_validate_runner, GST_TYPE_TRACER);
 
 /* signals */
 enum
@@ -104,6 +105,16 @@ enum
 };
 
 static guint _signals[LAST_SIGNAL] = { 0 };
+
+static void
+do_element_new (GstValidateRunner * self, guint64 ts, GstElement * element)
+{
+
+  if (GST_IS_PIPELINE (element)) {
+    /* the reference to the monitor is lost */
+    gst_validate_monitor_factory_create (GST_OBJECT_CAST (element), self, NULL);
+  }
+}
 
 static gboolean
 _parse_reporting_level (gchar * str, GstValidateReportingDetails * level)
@@ -257,6 +268,8 @@ gst_validate_runner_class_init (GstValidateRunnerClass * klass)
 
   gobject_class->dispose = gst_validate_runner_dispose;
 
+  gst_validate_init ();
+
   g_type_class_add_private (klass, sizeof (GstValidateRunnerPrivate));
 
   _signals[REPORT_ADDED_SIGNAL] =
@@ -281,6 +294,9 @@ gst_validate_runner_init (GstValidateRunner * runner)
 
   runner->priv->default_level = GST_VALIDATE_SHOW_DEFAULT;
   _init_report_levels (runner);
+
+  gst_tracing_register_hook (GST_TRACER (runner), "element-new",
+      G_CALLBACK (do_element_new));
 }
 
 /**
@@ -529,3 +545,16 @@ gst_validate_runner_exit (GstValidateRunner * runner, gboolean print_result)
 
   return ret;
 }
+
+static gboolean
+plugin_init (GstPlugin * plugin)
+{
+  if (!gst_tracer_register (plugin, "validate", GST_TYPE_VALIDATE_RUNNER))
+    return FALSE;
+
+  return TRUE;
+}
+
+GST_PLUGIN_DEFINE (GST_VERSION_MAJOR, GST_VERSION_MINOR, validatetracer,
+    "GStreamer Validate tracers", plugin_init, VERSION, GST_LICENSE,
+    GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN);
