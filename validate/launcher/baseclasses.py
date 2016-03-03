@@ -212,7 +212,7 @@ class Test(Loggable):
             self.set_result(Result.PASSED)
         elif self.process.returncode == VALGRIND_ERROR_CODE:
             self.set_result(Result.FAILED, "Valgrind reported errors")
-        else:
+        elif not self.check_and_set_hard_timeout():
             self.set_result(Result.FAILED,
                             "Application returned %d" % (self.process.returncode))
 
@@ -268,13 +268,23 @@ class Test(Loggable):
                                 self.timeout,
                                 "timeout")
                 return True
-        elif self.hard_timeout and time.time() - self.start_ts > self.hard_timeout:
-            self.set_result(
-                Result.TIMEOUT, "Hard timeout reached: %d secs" % self.hard_timeout)
+        elif self.check_and_set_hard_timeout():
             return True
         else:
             self.last_change_ts = time.time()
             self.last_val = val
+
+        return False
+
+    def check_and_set_hard_timeout(self):
+        if not self.hard_timeout:
+            return False
+
+        if time.time() - self.start_ts > self.hard_timeout:
+            self.set_result(Result.TIMEOUT,
+                            "Hard timeout reached: %d secs" %
+                            self.hard_timeout)
+            return True
 
         return False
 
