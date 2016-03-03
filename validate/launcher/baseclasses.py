@@ -151,7 +151,13 @@ class Test(Loggable):
         self.out = None
 
     def _get_file_content(self, file_name):
-        f = open(file_name, 'r+')
+        try:
+            f = open(file_name, 'r+')
+        except IOError:
+            self.warning("Could not get %s content" % file_name)
+
+            return ""
+
         value = f.read()
         f.close()
 
