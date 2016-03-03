@@ -523,15 +523,17 @@ Note that all testsuite should be inside python modules, so the directory should
         return
 
     e = None
+    exit_code = 0
     try:
         tests_launcher.run_tests()
     except Exception as e:
         pass
     finally:
-        tests_launcher.final_report()
+        if not tests_launcher.final_report():
+            exit_code = 1
         httpsrv.stop()
         vfb_server.stop()
         if e is not None:
             raise
 
-    return 0
+    return exit_code

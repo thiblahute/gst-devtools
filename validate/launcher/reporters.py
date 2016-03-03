@@ -93,9 +93,11 @@ class Reporter(Loggable):
     def final_report(self):
         print "\n"
         printc("Final Report:", title=True)
+        all_passed = True
         for test in sorted(self.results, key=lambda test: test.result):
             printc(test)
             if test.result != Result.PASSED:
+                all_passed = False
                 print "\n"
 
         print "\n"
@@ -121,6 +123,8 @@ class Reporter(Loggable):
 
         printc("%sTotal: %d" % (lenstat * " ", total), color)
 
+        return all_passed
+
 
 class XunitReporter(Reporter):
 
@@ -135,7 +139,7 @@ class XunitReporter(Reporter):
 
     def final_report(self):
         self.report()
-        super(XunitReporter, self).final_report()
+        return super(XunitReporter, self).final_report()
 
     def _get_captured(self, test):
         captured = ""
