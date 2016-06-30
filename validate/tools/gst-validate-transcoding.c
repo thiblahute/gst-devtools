@@ -572,22 +572,44 @@ pad_added_cb (GstElement * uridecodebin, GstPad * pad, GstElement * encodebin)
 }
 
 static void
+sourcebin_pad_added_cb (GstElement * sourcebin, GstPad * pad,
+    GstElement * encodebin)
+{
+  GstElement *decodebin = gst_element_factory_make ("decodebin3", NULL);
+  GstPad *sinkpad = gst_element_get_static_pad (decodebin, "sink");
+
+  gst_bin_add (GST_BIN (GST_OBJECT_PARENT (encodebin)), decodebin);
+  gst_element_sync_state_with_parent (encodebin);
+  g_assert_cmpint (gst_pad_link (pad, sinkpad), ==, GST_PAD_LINK_OK);
+
+  g_signal_connect (decodebin, "pad-added", G_CALLBACK (pad_added_cb),
+      encodebin);
+}
+
+static void
 create_transcoding_pipeline (gchar * uri, gchar * outuri)
 {
   GstElement *src, *sink;
 
   pipeline = gst_pipeline_new ("encoding-pipeline");
-  src = gst_element_factory_make ("uridecodebin", NULL);
 
   encodebin = gst_element_factory_make ("encodebin", NULL);
   g_object_set (encodebin, "avoid-reencoding", !force_reencoding, NULL);
+
+  if (g_getenv ("USE_PLAYBIN3")) {
+    src = gst_element_factory_make ("urisourcebin", NULL);
+    g_signal_connect (src, "pad-added", G_CALLBACK (sourcebin_pad_added_cb),
+        encodebin);
+  } else {
+    src = gst_element_factory_make ("uridecodebin", NULL);
+    g_signal_connect (src, "pad-added", G_CALLBACK (pad_added_cb), encodebin);
+  }
+  g_object_set (src, "uri", uri, NULL);
+
   sink = gst_element_make_from_uri (GST_URI_SINK, outuri, "sink", NULL);
   g_assert (sink);
 
-  g_object_set (src, "uri", uri, NULL);
   g_object_set (encodebin, "profile", encoding_profile, NULL);
-
-  g_signal_connect (src, "pad-added", G_CALLBACK (pad_added_cb), encodebin);
 
   gst_bin_add_many (GST_BIN (pipeline), src, encodebin, sink, NULL);
   gst_element_link (encodebin, sink);
