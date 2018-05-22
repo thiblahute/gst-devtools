@@ -63,12 +63,22 @@ free_framenode (GstValidateMediaFrameNode * framenode)
 }
 
 static inline void
+free_segmentnode (GstValidateSegmentNode * segmentnode)
+{
+  g_free (segmentnode->str_open);
+  g_free (segmentnode->str_close);
+
+  g_slice_free (GstValidateSegmentNode, segmentnode);
+}
+
+static inline void
 free_streamnode (GstValidateMediaStreamNode * streamnode)
 {
   if (streamnode->caps)
     gst_caps_unref (streamnode->caps);
 
   g_list_free_full (streamnode->frames, (GDestroyNotify) free_framenode);
+  g_list_free_full (streamnode->segments, (GDestroyNotify) free_segmentnode);
 
   if (streamnode->pad)
     gst_object_unref (streamnode->pad);
@@ -338,6 +348,80 @@ stream_id_is_equal (const gchar * uri, const gchar * rid, const gchar * cid)
 }
 
 static gboolean
+compare_segments (GstValidateMediaDescriptor * ref,
+    gint i,
+    GstValidateMediaStreamNode * rstream,
+    GstValidateSegmentNode * rsegment, GstValidateSegmentNode * csegment)
+{
+  if (rsegment->next_frame_id != csegment->next_frame_id) {
+    GST_VALIDATE_REPORT (ref, FILE_FRAMES_INCORRECT,
+        "Segment %" GST_SEGMENT_FORMAT
+        " didn't come before the same frame ID, expected to come before %d, came before %d",
+        &rsegment->segment, rsegment->next_frame_id, csegment->next_frame_id);
+    return FALSE;
+  }
+#define CHECK_SEGMENT_FIELD(fieldname, format) \
+  if (rsegment->segment.fieldname != csegment->segment.fieldname) { \
+    GST_ERROR ("Expected: %" GST_SEGMENT_FORMAT " got: %" GST_SEGMENT_FORMAT, \
+      &rsegment->segment, &csegment->segment); \
+    GST_VALIDATE_REPORT (ref, FILE_SEGMENT_INCORRECT, \
+        "Stream %s segment %d has " #fieldname \
+        " mismatch, Expected " format " got: " format , \
+        rstream->id, i, rsegment->segment.fieldname, \
+        csegment->segment.fieldname); \
+      return FALSE; \
+  }
+
+  CHECK_SEGMENT_FIELD (flags, "%d");
+  CHECK_SEGMENT_FIELD (rate, "%f");
+  CHECK_SEGMENT_FIELD (applied_rate, "%f");
+  CHECK_SEGMENT_FIELD (base, "%" G_GUINT64_FORMAT);
+  CHECK_SEGMENT_FIELD (offset, "%" G_GUINT64_FORMAT);
+  CHECK_SEGMENT_FIELD (start, "%" G_GUINT64_FORMAT);
+  CHECK_SEGMENT_FIELD (stop, "%" G_GUINT64_FORMAT);
+  CHECK_SEGMENT_FIELD (time, "%" G_GUINT64_FORMAT);
+  CHECK_SEGMENT_FIELD (position, "%" G_GUINT64_FORMAT);
+  CHECK_SEGMENT_FIELD (duration, "%" G_GUINT64_FORMAT);
+
+  return TRUE;
+}
+
+static gboolean
+compare_segment_list (GstValidateMediaDescriptor * ref,
+    GstValidateMediaStreamNode * rstream, GstValidateMediaStreamNode * cstream)
+{
+  gint i;
+  GList *rsegments, *csegments;
+
+  if (g_list_length (rstream->segments) != g_list_length (cstream->segments)) {
+    GST_VALIDATE_REPORT (ref, FILE_SEGMENT_INCORRECT,
+        "Stream reference has %i segments, compared one has %i segments",
+        g_list_length (rstream->segments), g_list_length (cstream->segments));
+    return FALSE;
+  }
+
+  for (i = 0, rsegments = rstream->segments, csegments = cstream->segments;
+      rsegments;
+      rsegments = rsegments->next, csegments = csegments->next, i++) {
+    GstValidateSegmentNode *rsegment, *csegment;
+
+    if (csegment == NULL) {
+      /* The list was checked to be of the same size */
+      g_assert_not_reached ();
+      return FALSE;
+    }
+
+    rsegment = rsegments->data;
+    csegment = csegments->data;
+
+    if (!compare_segments (ref, i, rstream, rsegment, csegment))
+      return FALSE;
+  }
+
+  return TRUE;
+}
+
+static gboolean
 compare_frames (GstValidateMediaDescriptor * ref,
     GstValidateMediaStreamNode *
     rstream, GstValidateMediaFrameNode * rframe,
@@ -428,7 +512,7 @@ compare_streams (GstValidateMediaDescriptor * ref,
 
     if (!gst_caps_is_equal (rcaps, ccaps)) {
       gchar *rcaps_str = gst_caps_to_string (rcaps),
-        *ccaps_str = gst_caps_to_string (ccaps);
+          *ccaps_str = gst_caps_to_string (ccaps);
       GST_VALIDATE_REPORT (ref, FILE_PROFILE_INCORRECT,
           "Reference descriptor for stream %s has caps: %s"
           " but compared stream %s has caps: %s",
@@ -444,6 +528,8 @@ compare_streams (GstValidateMediaDescriptor * ref,
     gst_caps_unref (ccaps);
     /* We ignore the return value on purpose as this is not critical */
     compare_tags (ref, rstream, cstream);
+
+    compare_segment_list (ref, rstream, cstream);
 
     if (compare_frames_list (ref, rstream, cstream))
       return 1;

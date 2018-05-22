@@ -148,6 +148,11 @@ serialize_filenode (GstValidateMediaDescriptorWriter * writer)
 
     STR_APPEND2 (snode->str_open);
 
+    STR_APPEND3 ("<segments>");
+    for (tmp2 = g_list_last (snode->segments); tmp2; tmp2 = tmp2->prev)
+      STR_APPEND4 (((GstValidateSegmentNode *) tmp2->data)->str_open);
+    STR_APPEND3 ("</segments>");
+
     for (tmp2 = snode->frames; tmp2; tmp2 = tmp2->next) {
       STR_APPEND3 (((GstValidateMediaFrameNode *) tmp2->data)->str_open);
     }
@@ -317,8 +322,29 @@ _uridecodebin_probe (GstPad * pad, GstPadProbeInfo * info,
             (GstValidateMediaDescriptor *)
             writer, pad);
         if (streamnode) {
+          GstValidateSegmentNode *segment_node =
+              g_slice_new0 (GstValidateSegmentNode);
+
           gst_event_parse_segment (event, &segment);
-          gst_segment_copy_into (segment, &streamnode->segment);
+
+          gst_segment_copy_into (segment, &segment_node->segment);
+          segment_node->next_frame_id = g_list_length (streamnode->frames);
+
+          segment_node->str_open =
+              g_markup_printf_escaped ("<segment next-frame-id=\"%d\""
+              " flags=\"%d\" rate=\"%f\" applied-rate=\"%f\""
+              " format=\"%d\" base=\"%" G_GUINT64_FORMAT "\" offset=\"%"
+              G_GUINT64_FORMAT "\" start=\"%" G_GUINT64_FORMAT "\""
+              " stop=\"%" G_GUINT64_FORMAT "\" time=\"%" G_GUINT64_FORMAT
+              "\" position=\"%" G_GUINT64_FORMAT "\" duration=\"%"
+              G_GUINT64_FORMAT "\"/>", segment_node->next_frame_id,
+              segment->flags, segment->rate, segment->applied_rate,
+              segment->format, segment->base, segment->offset, segment->start,
+              segment->stop, segment->time, segment->position,
+              segment->duration);
+
+          streamnode->segments =
+              g_list_prepend (streamnode->segments, segment_node);
         }
         break;
       }
@@ -878,7 +904,8 @@ gst_validate_media_descriptor_writer_add_frame (GstValidateMediaDescriptorWriter
   fnode->pts = GST_BUFFER_PTS (buf);
   fnode->dts = GST_BUFFER_DTS (buf);
   fnode->running_time =
-      gst_segment_to_running_time (&streamnode->segment, GST_FORMAT_TIME,
+      gst_segment_to_running_time (&((GstValidateSegmentNode *)
+          streamnode->segments->data)->segment, GST_FORMAT_TIME,
       GST_BUFFER_PTS (buf));
   fnode->is_keyframe =
       (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DELTA_UNIT) == FALSE);
