@@ -2037,6 +2037,9 @@ class MediaDescriptor(Loggable):
     def get_path(self):
         raise NotImplemented
 
+    def has_frames(self):
+        return False
+
     def get_media_filepath(self):
         raise NotImplemented
 
@@ -2143,9 +2146,11 @@ class GstValidateMediaDescriptor(MediaDescriptor):
         self.set_protocol(urllib.parse.urlparse(
             urllib.parse.urlparse(self.get_uri()).scheme).scheme)
 
-
     def skip_parsers(self):
         return self._skip_parsers
+
+    def has_frames(self):
+        return self._has_frames
 
     def _extract_data(self, media_xml):
         # Extract the information we need from the xml
@@ -2161,6 +2166,7 @@ class GstValidateMediaDescriptor(MediaDescriptor):
                     (stream.attrib["type"], stream.attrib["caps"]))
         self._uri = media_xml.attrib["uri"]
         self._skip_parsers = bool(int(media_xml.attrib.get('skip-parsers', 0)))
+        self._has_frames = bool(media_xml.attrib["frame-detection"])
         self._duration = int(media_xml.attrib["duration"])
         self._protocol = media_xml.get("protocol", None)
         self._is_seekable = media_xml.attrib["seekable"].lower() == "true"
