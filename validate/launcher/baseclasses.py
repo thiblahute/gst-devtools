@@ -2128,6 +2128,7 @@ class MediaDescriptor(Loggable):
 class GstValidateMediaDescriptor(MediaDescriptor):
     # Some extension file for discovering results
     MEDIA_INFO_EXT = "media_info"
+    PUSH_MEDIA_INFO_EXT = "media_info.push"
     STREAM_INFO_EXT = "stream_info"
 
     def __init__(self, xml_path):
@@ -2180,7 +2181,7 @@ class GstValidateMediaDescriptor(MediaDescriptor):
             self._track_types.append(stream.attrib["type"])
 
     @staticmethod
-    def new_from_uri(uri, verbose=False, include_frames=False):
+    def new_from_uri(uri, verbose=False, include_frames=False, is_push=False):
         """
             include_frames = 0 # Never
             include_frames = 1 # always
@@ -2189,8 +2190,9 @@ class GstValidateMediaDescriptor(MediaDescriptor):
         """
         media_path = utils.url2path(uri)
 
-        descriptor_path = "%s.%s" % (
-            media_path, GstValidateMediaDescriptor.MEDIA_INFO_EXT)
+        ext = GstValidateMediaDescriptor.PUSH_MEDIA_INFO_EXT if is_push else \
+            GstValidateMediaDescriptor.MEDIA_INFO_EXT
+        descriptor_path = "%s.%s" % (media_path, ext)
         args = GstValidateBaseTestManager.MEDIA_CHECK_COMMAND.split(" ")
         args.append(uri)
         if include_frames == 2:
@@ -2241,6 +2243,8 @@ class GstValidateMediaDescriptor(MediaDescriptor):
     def get_media_filepath(self):
         if self.get_protocol() == Protocols.FILE:
             return self._xml_path.replace("." + self.MEDIA_INFO_EXT, "")
+        elif self.get_protocol() == Protocols.PUSHFILE:
+            return self._xml_path.replace("." + self.PUSH_MEDIA_INFO_EXT, "")
         else:
             return self._xml_path.replace("." + self.STREAM_INFO_EXT, "")
 
@@ -2257,7 +2261,10 @@ class GstValidateMediaDescriptor(MediaDescriptor):
         return self._duration
 
     def set_protocol(self, protocol):
-        self._protocol = protocol
+        if self._xml_path.endswith(GstValidateMediaDescriptor.PUSH_MEDIA_INFO_EXT):
+            self._protocol = Protocols.PUSHFILE
+        else:
+            self._protocol = protocol
 
     def get_protocol(self):
         return self._protocol
