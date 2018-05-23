@@ -483,6 +483,9 @@ class GstValidateMediaCheckTest(GstValidateTest):
         self.add_arguments(self._uri, "--expected-results",
                            self._media_info_path)
 
+        if self.media_descriptor.skip_parsers():
+            self.add_arguments("--skip-parsers")
+
 
 class GstValidateTranscodingTest(GstValidateTest, GstValidateEncodingTestInterface):
     scenarios_manager = ScenarioManager()
@@ -864,7 +867,18 @@ not been tested and explicitely activated if you set use --wanted-tests ALL""")
             else:
                 self.warning("Could not get any descriptor for %s" % uri)
 
-            return True
+                include_frames = 0
+                if self.options.update_media_info:
+                    include_frames = 2
+                elif self.options.generate_info_full:
+                    include_frames = 1
+
+                media_descriptor = GstValidateMediaDescriptor.new_from_uri(
+                    uri, True, include_frames, is_push)
+                if media_descriptor:
+                    self._add_media(media_descriptor, uri)
+                else:
+                    self.warning("Could not get any descriptor for %s" % uri)
 
         except subprocess.CalledProcessError as e:
             if self.options.generate_info:

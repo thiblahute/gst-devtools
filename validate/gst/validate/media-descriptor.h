@@ -55,6 +55,7 @@ typedef struct
   gchar *uri;
   GstClockTime duration;
   gboolean frame_detection;
+  gboolean skip_parsers;
   gboolean seekable;
 
   GstCaps *caps;
