@@ -176,8 +176,7 @@ class Test(Loggable):
         if self.out:
             return
 
-        path = os.path.join(self.options.logsdir,
-                            self.classname.replace(".", os.sep))
+        path = os.path.join(self.options.logsdir, self.classname + ".txt")
         mkdir(os.path.dirname(path))
         self.logfile = path
 

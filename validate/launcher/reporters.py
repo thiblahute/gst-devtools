@@ -131,7 +131,7 @@ class XunitReporter(Reporter):
     def __init__(self, options):
         super(XunitReporter, self).__init__(options)
 
-        self._createTmpFile()
+        self.testsuites = {}
 
     def final_report(self):
         self.report()
@@ -170,34 +170,56 @@ class XunitReporter(Reporter):
         self.debug("Writing XML file to: %s", self.options.xunit_file)
         xml_file = codecs.open(self.options.xunit_file, 'w',
                                self.encoding, 'replace')
+        xml_file.write('<?xml version="1.0" encoding="%s"?><testsuites>' % self.encoding)
 
-        self.stats['encoding'] = self.encoding
-        self.stats['total'] = (self.stats['timeout'] + self.stats['failures'] +
-                               self.stats['passed'] + self.stats['skipped'])
+        for testsuite, tests in self.testsuites.items():
+            stats = {'testsuite': testsuite, 'timeout': 0, 'failures': 0, 'passed': 0, 'skipped': 0}
+            for test in tests:
+                if test.result == Result.PASSED:
+                    stats["passed"] += 1
+                elif test.result == Result.FAILED or test.result == Result.TIMEOUT:
+                    stats["failures"] += 1
+                elif test.result == Result.SKIPPED:
+                    stats["skipped"] += 1
+                else:
+                    raise UnknownResult("%s" % test.result)
 
-        xml_file.write('<?xml version="1.0" encoding="%(encoding)s"?>'
-                       '<testsuite name="gst-validate-launcher" tests="%(total)d" '
-                       'errors="%(timeout)d" failures="%(failures)d" '
-                       'skipped="%(skipped)d">' % self.stats)
+            stats['total'] = (stats['timeout'] + stats['failures'] + stats['passed'] + stats['skipped'])
+            xml_file.write('<testsuite name="%(testsuite)s" tests="%(total)d" '
+                        'errors="%(timeout)d" failures="%(failures)d" '
+                        'skipped="%(skipped)d">' % stats)
 
-        tmp_xml_file = codecs.open(self.tmp_xml_file.name, 'r',
-                                   self.encoding, 'replace')
+            for test in tests:
+                if test.result == Result.PASSED:
+                    self.serialize_passed(test, xml_file)
+                elif test.result == Result.FAILED or \
+                        test.result == Result.TIMEOUT or \
+                        test.result == Result.SKIPPED:
+                    self.serialize_failed(test, xml_file)
+                else:
+                    raise UnknownResult("%s" % test.result)
 
-        for l in tmp_xml_file:
-            xml_file.write(l)
+            xml_file.write('</testsuite>')
 
-        xml_file.write('</testsuite>')
+        xml_file.write('</testsuites>')
         xml_file.close()
-        tmp_xml_file.close()
-        os.remove(self.tmp_xml_file.name)
 
-        self._createTmpFile()
+    def get_test_suite(self, test):
+        testsuite = test.classname.split('.')[0]
 
-    def _createTmpFile(self):
-        self.tmp_xml_file = tempfile.NamedTemporaryFile(delete=False)
-        self.tmp_xml_file.close()
+        tests = self.testsuites.get(testsuite)
+        if tests:
+            return tests
 
-    def set_failed(self, test):
+        self.testsuites[testsuite] = []
+
+        return self.testsuites[testsuite]
+
+    def add_results(self, test):
+        self.get_test_suite(test).append(test)
+        super().add_results(test)
+
+    def serialize_failed(self, test, xml_file):
         """Add failure output to Xunit report.
         """
         super().set_failed(test)
@@ -205,38 +227,30 @@ class XunitReporter(Reporter):
         stack_trace = ''
         if test.stack_trace:
             stack_trace = '<![CDATA[%s]]>' % (escape_cdata(test.stack_trace))
-        xml_file = codecs.open(self.tmp_xml_file.name, 'a',
-                               self.encoding, 'replace')
         xml_file.write(self._forceUnicode(
             '<testcase classname=%(cls)s name=%(name)s time="%(taken).3f">'
             '<error type=%(errtype)s message=%(message)s>%(stacktrace)s'
             '</error>%(systemout)s</testcase>' %
-            {'cls': self._quoteattr(test.get_classname()),
-             'name': self._quoteattr(test.get_name()),
+            {'cls': self._quoteattr(test.classname),
+             'name': self._quoteattr(test.classname.replace(".", " ").capitalize()),
              'taken': test.time_taken,
              'stacktrace': stack_trace,
              'errtype': self._quoteattr(test.result),
              'message': self._quoteattr(test.message),
              'systemout': self._get_captured(test),
              }))
-        xml_file.close()
 
-    def set_passed(self, test):
+    def serialize_passed(self, test, xml_file):
         """Add success output to Xunit report.
         """
-        self.stats['passed'] += 1
-
-        xml_file = codecs.open(self.tmp_xml_file.name, 'a',
-                               self.encoding, 'replace')
         xml_file.write(self._forceUnicode(
             '<testcase classname=%(cls)s name=%(name)s '
-            'time="%(taken).3f">%(systemout)s</testcase>' %
-            {'cls': self._quoteattr(test.get_classname()),
-             'name': self._quoteattr(test.get_name()),
+            'time="%(taken).3f"><system-out>%(systemout)s</system-out></testcase>' %
+            {'cls': self._quoteattr(test.classname),
+             'name': self._quoteattr(test.classname.replace(".", " ").capitalize()),
              'taken': test.time_taken,
              'systemout': self._get_captured(test),
              }))
-        xml_file.close()
 
     def _forceUnicode(self, s):
         if not UNICODE_STRINGS:
