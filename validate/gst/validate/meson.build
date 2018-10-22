@@ -84,7 +84,7 @@ if build_gir
       '-I' + meson.current_build_dir() + '/../../',
       '--cflags-end']
     endif
-    validate_gen_sources = [gnome.generate_gir(gstvalidate,
+    validate_gir = gnome.generate_gir(gstvalidate,
             sources : gstvalidate_sources + gstvalidate_headers + gst_validate_enums,
             nsversion : '1.0',
             namespace : 'GstValidate',
@@ -99,7 +99,8 @@ if build_gir
                         'GstPbutils-' + apiversion],
             install : true,
             dependencies : [gst_dep, glib_dep, gio_dep, gst_pbutils_dep],
-    )]
+    )
+    validate_gen_sources += validate_gir
 endif
 
 validate_dep = declare_dependency(link_with : gstvalidate,
