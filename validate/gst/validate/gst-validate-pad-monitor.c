@@ -2826,6 +2826,8 @@ gst_validate_pad_monitor_do_setup (GstValidateMonitor * monitor)
 
   gst_validate_reporter_set_name (GST_VALIDATE_REPORTER (monitor),
       g_strdup_printf ("%s:%s", GST_DEBUG_PAD_NAME (pad)));
+  printf ("PAD MONITOR: %s\n",
+      gst_validate_reporter_get_name (GST_VALIDATE_REPORTER (monitor)));
 
   if (G_UNLIKELY (GST_PAD_PARENT (pad) == NULL))
     GST_FIXME ("Saw a pad not belonging to any object");

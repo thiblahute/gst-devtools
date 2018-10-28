@@ -37,6 +37,7 @@
 #include "gst-validate-override.h"
 #include "gst-validate-override-registry.h"
 
+#include <stdio.h>
 typedef struct
 {
   gchar *name;
@@ -179,6 +180,7 @@ static void
   const gchar *name;
 
   name = gst_validate_reporter_get_name (GST_VALIDATE_REPORTER (monitor));
+  printf ("ATTACHABLE %s\n", name);
   for (iter = registry->name_overrides.head; iter; iter = g_list_next (iter)) {
     entry = iter->data;
     if (g_regex_match_simple (entry->name, name, 0, 0)) {
